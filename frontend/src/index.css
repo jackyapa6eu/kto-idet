@@ -1,0 +1,20 @@
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+/* iOS/Android auto-zoom on focus if an input's font-size is under 16px. */
+input,
+textarea,
+.ant-select-selector {
+  font-size: 16px !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #141414;
+  }
+}

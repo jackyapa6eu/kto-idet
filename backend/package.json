@@ -1,0 +1,26 @@
+{
+  "name": "backend",
+  "type": "module",
+  "scripts": {
+    "dev": "dotenv -e .env.local -- tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:push": "dotenv -e .env.local -- drizzle-kit push",
+    "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
+    "db:seed": "dotenv -e .env.local -- tsx src/db/seed.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.12",
+    "@neondatabase/serverless": "^1.1.0",
+    "drizzle-orm": "^0.45.2",
+    "grammy": "^1.45.1",
+    "hono": "^4.12.32"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.3"
+  }
+}
