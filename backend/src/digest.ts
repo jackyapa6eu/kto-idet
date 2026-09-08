@@ -35,13 +35,18 @@ function formatEventTime(date: Date): string {
   }).format(date)
 }
 
-function formatName(p: { firstName: string; lastName: string | null; paid: boolean }): string {
-  const name = [p.firstName, p.lastName].filter(Boolean).join(' ')
-  return p.paid ? `${name} 💰` : name
-}
-
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// tg://user?id=<id> — официальная HTML-ссылка Telegram для упоминания пользователя по id
+// без юзернейма (Bot API создаёт из неё text_mention-сущность): нажатие открывает профиль,
+// работает даже у тех, кто не задал себе @username. telegramId — всегда числовая строка из
+// нашей же БД (Telegram user id), экранировать её как пользовательский ввод не нужно.
+function formatParticipantLink(p: { telegramId: string; firstName: string; lastName: string | null; paid: boolean }): string {
+  const name = escapeHtml([p.firstName, p.lastName].filter(Boolean).join(' '))
+  const label = p.paid ? `${name} 💰` : name
+  return `<a href="tg://user?id=${p.telegramId}">${label}</a>`
 }
 
 export async function buildDigestText(organizationId: number): Promise<string> {
@@ -61,7 +66,12 @@ export async function buildDigestText(organizationId: number): Promise<string> {
 
   for (const event of upcoming) {
     const eventParticipants = await db
-      .select({ firstName: users.firstName, lastName: users.lastName, paid: participants.paid })
+      .select({
+        telegramId: users.telegramId,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        paid: participants.paid,
+      })
       .from(participants)
       .innerJoin(users, eq(users.telegramId, participants.telegramId))
       .where(eq(participants.eventId, event.id))
@@ -85,7 +95,7 @@ export async function buildDigestText(organizationId: number): Promise<string> {
     lines.push(`👥 Участники (${countLabel}):`)
 
     if (eventParticipants.length > 0) {
-      const names = eventParticipants.map((p) => escapeHtml(formatName(p))).join('\n')
+      const names = eventParticipants.map((p) => formatParticipantLink(p)).join('\n')
       lines.push(`<blockquote expandable>${names}</blockquote>`)
     } else {
       lines.push('пока никого')
