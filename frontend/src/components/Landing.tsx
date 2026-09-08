@@ -28,32 +28,38 @@ const features = [
 
 const useCases = [
   {
-    icon: '🏐',
+    image: '/usecase-sport.jpg',
+    alt: 'Друзья с волейбольным мячом смотрят расписание тренировок в мобильном приложении',
     title: 'Спортивные секции и тренировки',
     text: 'Волейбол, футбол, бассейн, бег — фиксированное число мест на тренировку и список тех, кто пришёл.',
   },
   {
-    icon: '🎲',
+    image: '/usecase-quiz.jpg',
+    alt: 'Компания играет в настольную игру и квиз за столом',
     title: 'Квизы и настольные игры',
     text: 'Сбор команды на игру или квиз, ограничение по числу участников и рассадка по столам.',
   },
   {
-    icon: '📚',
+    image: '/usecase-courses.jpg',
+    alt: 'Группа готовится к занятию с ноутбуком и конспектом',
     title: 'Курсы и мастер-классы',
     text: 'Запись на конкретное занятие с ограниченным числом мест, напоминание перед началом.',
   },
   {
-    icon: '🎒',
+    image: '/usecase-hiking.jpg',
+    alt: 'Друзья с рюкзаками в горах на фоне пейзажа',
     title: 'Походы и поездки',
     text: 'Кто едет, список участников, взносы — всё в одном закреплённом сообщении группы.',
   },
   {
-    icon: '💬',
+    image: '/usecase-clubs.jpg',
+    alt: 'Друзья обсуждают книги за чашкой кофе',
     title: 'Клубы по интересам',
     text: 'Книжный клуб, киноклуб, кружки — регулярные встречи с записью на каждую новую дату.',
   },
   {
-    icon: '🎉',
+    image: '/usecase-events.jpg',
+    alt: 'Компания отмечает вечеринку на крыше с гирляндами и шариками',
     title: 'Разовые события',
     text: 'Вечеринка, турнир, встреча выпускников — организовать разовый сбор так же просто.',
   },
@@ -229,9 +235,14 @@ export const Landing = () => {
           <div className="landing__grid">
             {useCases.map((u) => (
               <div className="landing__card" key={u.title}>
-                <span className="landing__card-icon" aria-hidden="true">
-                  {u.icon}
-                </span>
+                <img
+                  className="landing__card-icon-img"
+                  src={u.image}
+                  alt={u.alt}
+                  width={56}
+                  height={56}
+                  loading="lazy"
+                />
                 <p className="landing__card-title">{u.title}</p>
                 <p className="landing__card-text">{u.text}</p>
               </div>

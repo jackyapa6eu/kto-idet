@@ -178,6 +178,15 @@
   display: block;
 }
 
+.landing__card-icon-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 10px;
+  display: block;
+}
+
 .landing__card-title {
   font-size: 15px;
   font-weight: 700;
