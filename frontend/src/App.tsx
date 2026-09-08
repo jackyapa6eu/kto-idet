@@ -124,7 +124,9 @@ const App = observer(() => {
       theme={{ algorithm: themeStore.isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm }}
     >
       <ThemedBackground>
-        <AppContent />
+        <main>
+          <AppContent />
+        </main>
         <AppModal />
       </ThemedBackground>
     </ConfigProvider>

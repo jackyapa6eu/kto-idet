@@ -131,7 +131,7 @@ export const Landing = () => {
   return (
     <div className="landing">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: structuredData }} />
-      <div className="landing__inner">
+      <main className="landing__inner">
         <section className="landing__hero">
           <span className="landing__badge">✈️ Для Telegram-групп</span>
           <h1 className="landing__title">
@@ -216,7 +216,7 @@ export const Landing = () => {
             · «Кто идёт», {new Date().getFullYear()}
           </p>
         </section>
-      </div>
+      </main>
     </div>
   )
 }

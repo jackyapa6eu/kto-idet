@@ -5,7 +5,9 @@
   --landing-text-secondary: #5b6472;
   --landing-border: #e6e9ef;
   --landing-primary: #229ed9;
-  --landing-primary-dark: #1b87ba;
+  /* #1b87ba измерял 4.0:1 на белом/светлом фоне — ниже порога WCAG AA (4.5:1) для мелкого
+     текста (бейдж, ссылка в футере); этот оттенок даёт ~6:1. */
+  --landing-primary-dark: #146a91;
   --landing-primary-contrast: #ffffff;
   --landing-card-bg: #ffffff;
   --landing-shadow: 0 8px 24px rgba(15, 23, 41, 0.06);
