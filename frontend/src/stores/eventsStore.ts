@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx'
 import dayjs from 'dayjs'
-import { apiFetch } from '../api'
+import { apiFetch, extractErrorMessage } from '../api'
 
 export interface EventItem {
   id: number
@@ -21,6 +21,9 @@ export interface EventParticipant {
 
 export interface EventDetails {
   id: number
+  // null у мероприятий, созданных до перехода на мультитенантность. По этому полю App.tsx
+  // узнаёт, для какой организации показать список под ссылкой на конкретное мероприятие.
+  organizationId: number | null
   title: string
   location: string
   startsAt: string
@@ -53,6 +56,9 @@ export interface CreateEventInput {
 export type UpdateEventInput = CreateEventInput
 
 class EventsStore {
+  // Список — per-org: запоминаем, для какой организации он загружен, чтобы create/update/
+  // join/leave/delete могли обновить его же, не прося organizationId заново у вызывающего.
+  organizationId: number | null = null
   events: EventItem[] = []
   loading = false
   error: string | null = null
@@ -67,12 +73,13 @@ class EventsStore {
     makeAutoObservable(this)
   }
 
-  async fetchEvents() {
+  async fetchEvents(organizationId: number) {
+    this.organizationId = organizationId
     this.loading = true
     this.error = null
     try {
-      const res = await apiFetch('/api/events')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const res = await apiFetch(`/api/events?organizationId=${organizationId}`)
+      if (!res.ok) throw new Error(await extractErrorMessage(res))
       const data: EventItem[] = await res.json()
       const startOfToday = dayjs().startOf('day')
       runInAction(() => {
@@ -89,15 +96,20 @@ class EventsStore {
     }
   }
 
+  private async refetchEvents() {
+    if (this.organizationId != null) await this.fetchEvents(this.organizationId)
+  }
+
   async createEvent(input: CreateEventInput) {
+    if (this.organizationId == null) throw new Error('Неизвестна организация для создания мероприятия')
     this.creating = true
     try {
       const res = await apiFetch('/api/events', {
         method: 'POST',
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, organizationId: this.organizationId }),
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      await this.fetchEvents()
+      if (!res.ok) throw new Error(await extractErrorMessage(res))
+      await this.refetchEvents()
     } finally {
       runInAction(() => {
         this.creating = false
@@ -112,8 +124,8 @@ class EventsStore {
         method: 'PUT',
         body: JSON.stringify(input),
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      await Promise.all([this.fetchEventDetails(id), this.fetchEvents()])
+      if (!res.ok) throw new Error(await extractErrorMessage(res))
+      await Promise.all([this.fetchEventDetails(id), this.refetchEvents()])
     } finally {
       runInAction(() => {
         this.updating = false
@@ -151,14 +163,14 @@ class EventsStore {
 
   async joinEvent(id: number) {
     const res = await apiFetch(`/api/events/${id}/participants`, { method: 'POST' })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    await Promise.all([this.fetchEventDetails(id), this.fetchEvents()])
+    if (!res.ok) throw new Error(await extractErrorMessage(res))
+    await Promise.all([this.fetchEventDetails(id), this.refetchEvents()])
   }
 
   async leaveEvent(id: number) {
     const res = await apiFetch(`/api/events/${id}/participants`, { method: 'DELETE' })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    await Promise.all([this.fetchEventDetails(id), this.fetchEvents()])
+    if (!res.ok) throw new Error(await extractErrorMessage(res))
+    await Promise.all([this.fetchEventDetails(id), this.refetchEvents()])
   }
 
   // Оптимистично меняем локально — полный refetch дёрнул бы selectedEventLoading и мигнул
@@ -189,8 +201,8 @@ class EventsStore {
 
   async deleteEvent(id: number) {
     const res = await apiFetch(`/api/events/${id}`, { method: 'DELETE' })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    await this.fetchEvents()
+    if (!res.ok) throw new Error(await extractErrorMessage(res))
+    await this.refetchEvents()
   }
 }
 

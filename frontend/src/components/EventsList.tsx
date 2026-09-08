@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite'
 import { Card, Typography, Tag, Flex, Spin, Alert, Button } from 'antd'
 import { CalendarOutlined, EnvironmentOutlined, TeamOutlined, PlusOutlined } from '@ant-design/icons'
 import { eventsStore, type EventItem } from '../stores/eventsStore'
+import { orgStore } from '../stores/orgStore'
 import { modalStore } from '../stores/modalStore'
 import { EventDetailsModalContent } from './EventDetailsModalContent'
 import { CreateEventForm } from './CreateEventForm'
@@ -18,10 +19,15 @@ function openCreateEvent() {
   modalStore.open(<CreateEventForm />, 'Новое мероприятие')
 }
 
-export const EventsList = observer(() => {
+export const EventsList = observer(({ organizationId }: { organizationId: number }) => {
   useEffect(() => {
-    eventsStore.fetchEvents()
-  }, [])
+    eventsStore.fetchEvents(organizationId)
+    orgStore.fetchOrganization(organizationId)
+  }, [organizationId])
+
+  // Пока orgStore ещё не ответил, не показываем кнопку — лучше короткая задержка, чем
+  // мелькание "Создать" с последующим исчезновением для тех, кому создавать нельзя.
+  const canCreateEvents = orgStore.org?.canCreateEvents ?? false
 
   return (
     <>
@@ -29,10 +35,19 @@ export const EventsList = observer(() => {
         <Title level={4} style={{ margin: 0 }}>
           Предстоящие мероприятия
         </Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateEvent}>
-          Создать
-        </Button>
+        {canCreateEvents && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateEvent}>
+            Создать
+          </Button>
+        )}
       </Flex>
+      {orgStore.org && !canCreateEvents && (
+        <Alert
+          type="info"
+          showIcon
+          message="Создавать мероприятия может только администратор группы"
+        />
+      )}
       {eventsStore.loading && <Spin />}
       {eventsStore.error && <Alert type="error" message={eventsStore.error} showIcon />}
       <Flex vertical gap={8}>

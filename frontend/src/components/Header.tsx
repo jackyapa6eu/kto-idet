@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { observer } from 'mobx-react-lite'
 import { Avatar, Flex, Typography } from 'antd'
 import { UserOutlined } from '@ant-design/icons'
@@ -7,12 +8,15 @@ const { Title } = Typography
 
 const isInTelegram = !!window.Telegram?.WebApp?.initData
 
-export const Header = observer(() => {
+export const Header = observer(({ extra }: { extra?: ReactNode }) => {
   return (
     <Flex align="center" justify="space-between">
-      <Title level={3} style={{ margin: 0 }}>
-        ОПГ Здоровья
-      </Title>
+      <Flex align="center" gap={8}>
+        <Title level={3} style={{ margin: 0 }}>
+          Кто идёт
+        </Title>
+        {extra}
+      </Flex>
       <Flex align="center" gap={8}>
         <Typography.Text>{userStore.fullName}</Typography.Text>
         <Avatar src={userStore.avatarUrl} icon={<UserOutlined />}>

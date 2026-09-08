@@ -15,3 +15,13 @@ export function apiFetch(path: string, init: RequestInit = {}) {
 
   return fetch(`${API_URL}${path}`, { ...init, headers })
 }
+
+export async function extractErrorMessage(res: Response): Promise<string> {
+  try {
+    const body: { error?: string } = await res.json()
+    if (body.error) return body.error
+  } catch {
+    // тело не JSON или пустое — используем код статуса как есть
+  }
+  return `HTTP ${res.status}`
+}

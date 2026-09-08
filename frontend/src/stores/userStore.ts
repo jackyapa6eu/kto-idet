@@ -6,7 +6,6 @@ export interface SyncedUser {
   firstName: string
   lastName: string | null
   photoUrl: string | null
-  isGroupMember: boolean
 }
 
 const isInTelegram = !!window.Telegram?.WebApp?.initData
@@ -16,7 +15,6 @@ class UserStore {
   firstName = ''
   lastName = ''
   avatarUrl: string | null = null
-  isGroupMember = false
   authToken: string | null = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
   authLoading = isInTelegram || !!this.authToken
 
@@ -50,7 +48,6 @@ class UserStore {
     this.firstName = user.firstName
     this.lastName = user.lastName ?? ''
     this.avatarUrl = user.photoUrl
-    this.isGroupMember = user.isGroupMember
   }
 
   async syncWithBackend() {
@@ -99,7 +96,6 @@ class UserStore {
     this.firstName = ''
     this.lastName = ''
     this.avatarUrl = null
-    this.isGroupMember = false
   }
 
   get fullName() {

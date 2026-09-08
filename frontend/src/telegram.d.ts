@@ -19,6 +19,7 @@ interface TelegramWebApp {
   colorScheme: 'light' | 'dark'
   onEvent: (eventType: 'themeChanged', callback: () => void) => void
   offEvent: (eventType: 'themeChanged', callback: () => void) => void
+  openTelegramLink: (url: string) => void
 }
 
 declare global {
