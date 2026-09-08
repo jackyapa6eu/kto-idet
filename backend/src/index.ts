@@ -5,10 +5,18 @@ import type { Context, Next } from 'hono'
 import { cors } from 'hono/cors'
 import { sign, verify } from 'hono/jwt'
 import { webhookCallback } from 'grammy'
-import { and, asc, count, eq } from 'drizzle-orm'
+import { and, asc, count, desc, eq } from 'drizzle-orm'
 import { getDb } from './db/index.js'
 import { events, participants, users, loginSessions, organizations } from './db/schema.js'
-import { getBot, getBotUsername, buildMiniAppLink, isChatMember, isChatAdmin, purgeExpiredOrganizations } from './bot.js'
+import {
+  getBot,
+  getBotUsername,
+  buildMiniAppLink,
+  isChatMember,
+  isChatAdmin,
+  purgeExpiredOrganizations,
+  getChatTitle,
+} from './bot.js'
 import { upsertUser } from './users.js'
 import { validateInitData } from './telegramAuth.js'
 import { syncChannelDigest, sendEventCreatedNotification, updateEventNotification } from './digest.js'
@@ -236,6 +244,49 @@ app.patch('/api/organizations/:id', telegramAuth, async (c) => {
   const [updated] = await db.update(organizations).set(update).where(eq(organizations.id, id)).returning()
 
   return c.json(organizationSettingsResponse(updated, isOwner, canManage))
+})
+
+// Личный дашборд владельца бота (не путать с настройками отдельной организации выше) — сколько
+// всего чатов подключено и на какой они стадии. Доступ по ADMIN_TELEGRAM_ID, а не по владению
+// организацией, т.к. это статистика по всем организациям сразу, а не по одной.
+app.get('/api/admin/stats', telegramAuth, async (c) => {
+  const tgUser = c.get('tgUser')
+  const adminId = process.env.ADMIN_TELEGRAM_ID
+  if (!adminId || String(tgUser.id) !== adminId) {
+    return c.json({ error: 'Доступ запрещён' }, 403)
+  }
+
+  const db = getDb()
+  const rows = await db
+    .select({
+      id: organizations.id,
+      name: organizations.name,
+      telegramChatId: organizations.telegramChatId,
+      status: organizations.status,
+      createdAt: organizations.createdAt,
+      scheduledDeletionAt: organizations.scheduledDeletionAt,
+      eventsCount: count(events.id),
+    })
+    .from(organizations)
+    .leftJoin(events, eq(events.organizationId, organizations.id))
+    .groupBy(organizations.id)
+    .orderBy(desc(organizations.createdAt))
+
+  // Живое название чата (а не org.name — оно может разойтись, см. getChatTitle в bot.ts).
+  const withTitles = await Promise.all(
+    rows.map(async (row) => ({ ...row, name: await getChatTitle(row.telegramChatId, row.name) })),
+  )
+
+  const counts = {
+    total: rows.length,
+    active: rows.filter((r) => r.status === 'active').length,
+    setup_pending: rows.filter((r) => r.status === 'setup_pending').length,
+    disconnected: rows.filter((r) => r.status === 'disconnected').length,
+    removed: rows.filter((r) => r.status === 'removed').length,
+    blocked: rows.filter((r) => r.status === 'blocked').length,
+  }
+
+  return c.json({ counts, organizations: withTitles })
 })
 
 const participantProfileColumns = {

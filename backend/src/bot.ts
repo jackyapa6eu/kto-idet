@@ -656,7 +656,7 @@ async function isBotAdminInChat(chatId: string): Promise<boolean> {
 // разойтись с реальным названием чата, если админ его поменял через настройки) — во всех
 // сообщениях/кнопках самого бота показываем актуальное название чата из Telegram, а не его.
 // Фолбэк на org.name — на случай, если бот уже потерял доступ к чату (removed/disconnected).
-async function getChatTitle(chatId: string, fallback: string): Promise<string> {
+export async function getChatTitle(chatId: string, fallback: string): Promise<string> {
   try {
     const chat = await getBot().api.getChat(chatId)
     return 'title' in chat && chat.title ? chat.title : fallback

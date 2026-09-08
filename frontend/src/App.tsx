@@ -10,6 +10,7 @@ import { AppModal } from './components/AppModal'
 import { TelegramBotLoginButton } from './components/TelegramBotLoginButton'
 import { EventDetailsModalContent } from './components/EventDetailsModalContent'
 import { OrgSettingsForm, OrgSettingsButton } from './components/OrgSettingsForm'
+import { AdminDashboard } from './components/AdminDashboard'
 import { userStore } from './stores/userStore'
 import { themeStore } from './stores/themeStore'
 import { modalStore } from './stores/modalStore'
@@ -25,6 +26,9 @@ function openModal(modal: string, id: string) {
       return
     case 'settings':
       modalStore.open(<OrgSettingsForm organizationId={Number(id)} />, 'Настройки группы')
+      return
+    case 'admin':
+      modalStore.open(<AdminDashboard />, 'Статистика бота')
       return
   }
 }
@@ -70,6 +74,10 @@ const AppContent = observer(() => {
       </Flex>
     )
   }
+
+  // Админский дашборд не привязан ни к одной организации — сам по себе список
+  // мероприятий/шапка группы здесь не нужны, всё содержимое живёт в модалке.
+  if (linkContext.modal === 'admin') return null
 
   // Список мероприятий — per-org. Контекст org-<id>/settings-<id> называет организацию
   // напрямую. Контекст event-<id> её не несёт в самой ссылке, но GET /api/events/:id (тот же
