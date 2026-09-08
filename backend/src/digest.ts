@@ -1,10 +1,9 @@
 import { GrammyError, InlineKeyboard } from 'grammy'
-import { asc, eq, gte } from 'drizzle-orm'
+import { and, asc, eq, gte } from 'drizzle-orm'
 import { getDb } from './db/index.js'
-import { events, participants, users, channelDigest } from './db/schema.js'
+import { events, participants, users, organizations } from './db/schema.js'
 import { getBot, buildMiniAppLink } from './bot.js'
 
-const DIGEST_ROW_ID = 1
 const EVENTS_TIME_ZONE = 'Asia/Krasnoyarsk'
 
 function startOfTodayInEventsTimeZone(): Date {
@@ -45,20 +44,20 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-export async function buildDigestText(): Promise<string> {
+export async function buildDigestText(organizationId: number): Promise<string> {
   const db = getDb()
 
   const upcoming = await db
     .select()
     .from(events)
-    .where(gte(events.startsAt, startOfTodayInEventsTimeZone()))
+    .where(and(eq(events.organizationId, organizationId), gte(events.startsAt, startOfTodayInEventsTimeZone())))
     .orderBy(asc(events.startsAt))
 
   if (upcoming.length === 0) {
-    return '📋 <b>Мероприятия ОПГ Здоровья</b>\n\nПока нет запланированных мероприятий.'
+    return '📋 <b>Мероприятия</b>\n\nПока нет запланированных мероприятий.'
   }
 
-  const lines = ['📋 <b>Мероприятия ОПГ Здоровья</b>', '']
+  const lines = ['📋 <b>Мероприятия</b>', '']
 
   for (const event of upcoming) {
     const eventParticipants = await db
@@ -100,18 +99,7 @@ export async function buildDigestText(): Promise<string> {
   return lines.join('\n').trim()
 }
 
-// Отдельное разовое сообщение (не путать с саморедактирующейся сводкой выше) о том, что
-// появилось новое мероприятие — со ссылкой, которая открывает мини-апп сразу на нём.
-// Уходит в тот же чат/топик, что и напоминания за час до начала (TELEGRAM_REMINDER_*):
-// топик со сводкой (TELEGRAM_DIGEST_*) бывает закрыт для новых сообщений (там можно только
-// редактировать уже существующее сообщение сводки), а сюда новые сообщения всегда доходят.
-export async function sendEventCreatedNotification(event: typeof events.$inferSelect): Promise<void> {
-  const chatId = process.env.TELEGRAM_REMINDER_CHAT_ID
-  const threadIdRaw = process.env.TELEGRAM_REMINDER_THREAD_ID
-  if (!chatId) return
-
-  const messageThreadId = threadIdRaw ? Number(threadIdRaw) : undefined
-
+function buildEventNotificationText(event: typeof events.$inferSelect): string {
   const lines = [
     '🆕 <b>Новое мероприятие!</b>',
     '',
@@ -127,36 +115,81 @@ export async function sendEventCreatedNotification(event: typeof events.$inferSe
   if (event.bank) lines.push(`🏦 Банк: ${escapeHtml(event.bank)}`)
   if (event.comment) lines.push(`📝 Комментарий: ${escapeHtml(event.comment)}`)
   if (event.maxParticipants != null) lines.push(`👥 Мест: ${event.maxParticipants}`)
-
-  // Ссылка вида t.me/<bot>/<app> — Telegram открывает её как Mini App в любом чате
-  // (в отличие от web_app-кнопок, которые работают только в личных чатах с ботом).
-  const keyboard = new InlineKeyboard().url('Открыть мероприятие', buildMiniAppLink(`event-${event.id}`))
-
-  await getBot().api.sendMessage(chatId, lines.join('\n'), {
-    parse_mode: 'HTML',
-    message_thread_id: messageThreadId,
-    reply_markup: keyboard,
-  })
+  return lines.join('\n')
 }
 
-// Держит одно сообщение бота в топике со сводкой мероприятий актуальным: редактирует его
-// на месте при любом изменении (создание/удаление события, запись/отмена участия).
-export async function syncChannelDigest(): Promise<void> {
-  const chatId = process.env.TELEGRAM_DIGEST_CHAT_ID
-  const threadIdRaw = process.env.TELEGRAM_DIGEST_THREAD_ID
-  if (!chatId || !threadIdRaw) return
+// Ссылка вида t.me/<bot>/<app> — Telegram открывает её как Mini App в любом чате
+// (в отличие от web_app-кнопок, которые работают только в личных чатах с ботом).
+function buildEventNotificationKeyboard(eventId: number): InlineKeyboard {
+  return new InlineKeyboard().url('Открыть мероприятие', buildMiniAppLink(`event-${eventId}`))
+}
 
-  const messageThreadId = Number(threadIdRaw)
+// Отдельное сообщение (не путать с саморедактирующейся сводкой ниже) о том, что появилось
+// новое мероприятие. Уходит в топик напоминаний организации: топик со сводкой бывает закрыт
+// для новых сообщений (там можно только редактировать уже существующее сообщение сводки), а
+// сюда новые сообщения всегда доходят. Возвращает id отправленного сообщения — вызывающий
+// код сохраняет его в events.notificationMessageId, чтобы потом редактировать это же
+// сообщение при изменении события (см. updateEventNotification), а не слать новое.
+export async function sendEventCreatedNotification(
+  event: typeof events.$inferSelect,
+): Promise<number | undefined> {
+  if (event.organizationId == null) return undefined
+
   const db = getDb()
-  const text = await buildDigestText()
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, event.organizationId))
+  if (!org?.reminderChatId || !org.notificationsEnabled) return undefined
+
+  const sent = await getBot().api.sendMessage(org.reminderChatId, buildEventNotificationText(event), {
+    parse_mode: 'HTML',
+    message_thread_id: org.reminderThreadId ?? undefined,
+    reply_markup: buildEventNotificationKeyboard(event.id),
+  })
+  return sent.message_id
+}
+
+// Правит на месте уже отправленное sendEventCreatedNotification сообщение — вызывается при
+// редактировании события, чтобы анонс в топике напоминаний не расходился с актуальными
+// данными (дата/место/цена и т.п.), а не оставался снимком на момент создания.
+export async function updateEventNotification(event: typeof events.$inferSelect): Promise<void> {
+  if (event.organizationId == null || event.notificationMessageId == null) return
+
+  const db = getDb()
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, event.organizationId))
+  if (!org?.reminderChatId || !org.notificationsEnabled) return
+
+  try {
+    await getBot().api.editMessageText(
+      org.reminderChatId,
+      event.notificationMessageId,
+      buildEventNotificationText(event),
+      { parse_mode: 'HTML', reply_markup: buildEventNotificationKeyboard(event.id) },
+    )
+  } catch (e) {
+    if (e instanceof GrammyError && e.description.includes('message is not modified')) return
+    // Сообщение недоступно для редактирования (удалено вручную и т.п.) — молча смиряемся,
+    // повторно слать новый анонс при каждом редактировании было бы более навязчивым, чем
+    // просто оставить анонс устаревшим (сводка при этом обновляется независимо).
+    console.error('Не удалось отредактировать сообщение-анонс мероприятия', e)
+  }
+}
+
+// Держит одно сообщение бота в топике со сводкой мероприятий организации актуальным:
+// редактирует его на месте при любом изменении (создание/удаление события, запись/отмена
+// участия) вместо того, чтобы слать новые. messageId организации — тот же, что записывает
+// /set_digest_here при первой настройке (bot.ts) — если его нет или редактирование не
+// удалось (сообщение удалили руками и т.п.), шлём новое и запоминаем его id взамен.
+export async function syncChannelDigest(organizationId: number): Promise<void> {
+  const db = getDb()
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, organizationId))
+  if (!org?.digestChatId || org.digestThreadId == null || !org.notificationsEnabled) return
+
+  const text = await buildDigestText(organizationId)
   const bot = getBot()
-  const keyboard = new InlineKeyboard().url('Присоединиться / Создать', buildMiniAppLink())
+  const keyboard = new InlineKeyboard().url('Открыть / Записаться', buildMiniAppLink(`org-${org.id}`))
 
-  const [existing] = await db.select().from(channelDigest).where(eq(channelDigest.id, DIGEST_ROW_ID))
-
-  if (existing?.messageId) {
+  if (org.digestMessageId) {
     try {
-      await bot.api.editMessageText(chatId, existing.messageId, text, {
+      await bot.api.editMessageText(org.digestChatId, org.digestMessageId, text, {
         parse_mode: 'HTML',
         reply_markup: keyboard,
       })
@@ -167,17 +200,15 @@ export async function syncChannelDigest(): Promise<void> {
     }
   }
 
-  const sent = await bot.api.sendMessage(chatId, text, {
-    message_thread_id: messageThreadId,
+  const sent = await bot.api.sendMessage(org.digestChatId, text, {
+    message_thread_id: org.digestThreadId,
     parse_mode: 'HTML',
     reply_markup: keyboard,
   })
+  await bot.api.pinChatMessage(org.digestChatId, sent.message_id, { disable_notification: true })
 
   await db
-    .insert(channelDigest)
-    .values({ id: DIGEST_ROW_ID, messageId: sent.message_id })
-    .onConflictDoUpdate({
-      target: channelDigest.id,
-      set: { messageId: sent.message_id, updatedAt: new Date() },
-    })
+    .update(organizations)
+    .set({ digestMessageId: sent.message_id, updatedAt: new Date() })
+    .where(eq(organizations.id, organizationId))
 }
