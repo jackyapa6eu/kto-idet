@@ -259,7 +259,6 @@ app.get('/api/admin/stats', telegramAuth, async (c) => {
   const rows = await db
     .select({
       id: organizations.id,
-      name: organizations.name,
       telegramChatId: organizations.telegramChatId,
       status: organizations.status,
       createdAt: organizations.createdAt,
@@ -271,9 +270,15 @@ app.get('/api/admin/stats', telegramAuth, async (c) => {
     .groupBy(organizations.id)
     .orderBy(desc(organizations.createdAt))
 
-  // Живое название чата (а не org.name — оно может разойтись, см. getChatTitle в bot.ts).
+  // Реальное название чата из Telegram — здесь принципиально не используем org.name
+  // (настраиваемое в мини-аппе), чтобы админский обзор всегда указывал на физический чат,
+  // а не на то, как его подписал владелец группы. org.name показывается только на странице
+  // мероприятий самого мини-аппа (см. EventsList.tsx).
   const withTitles = await Promise.all(
-    rows.map(async (row) => ({ ...row, name: await getChatTitle(row.telegramChatId, row.name) })),
+    rows.map(async (row) => ({
+      ...row,
+      name: await getChatTitle(row.telegramChatId, `Чат ${row.telegramChatId}`),
+    })),
   )
 
   const counts = {
@@ -308,7 +313,6 @@ app.get('/api/admin/events', telegramAuth, async (c) => {
       startsAt: events.startsAt,
       createdAt: events.createdAt,
       organizationId: events.organizationId,
-      organizationName: organizations.name,
       organizationTelegramChatId: organizations.telegramChatId,
       creatorFirstName: users.firstName,
       creatorLastName: users.lastName,
@@ -319,24 +323,17 @@ app.get('/api/admin/events', telegramAuth, async (c) => {
     .leftJoin(organizations, eq(events.organizationId, organizations.id))
     .leftJoin(users, eq(users.telegramId, events.createdByTelegramId))
     .leftJoin(participants, eq(participants.eventId, events.id))
-    .groupBy(
-      events.id,
-      organizations.name,
-      organizations.telegramChatId,
-      users.firstName,
-      users.lastName,
-      users.username,
-    )
+    .groupBy(events.id, organizations.telegramChatId, users.firstName, users.lastName, users.username)
     .orderBy(desc(events.createdAt))
     .limit(limit)
 
-  // Живое название чата — тот же принцип, что и в /api/admin/stats.
+  // Реальное название чата — тот же принцип, что и в /api/admin/stats (не org.name).
   const withTitles = await Promise.all(
     rows.map(async (row) => ({
       ...row,
       organizationName: row.organizationTelegramChatId
-        ? await getChatTitle(row.organizationTelegramChatId, row.organizationName ?? '—')
-        : (row.organizationName ?? '—'),
+        ? await getChatTitle(row.organizationTelegramChatId, `Чат ${row.organizationTelegramChatId}`)
+        : '—',
     })),
   )
 

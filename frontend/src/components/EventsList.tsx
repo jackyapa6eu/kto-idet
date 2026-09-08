@@ -32,9 +32,19 @@ export const EventsList = observer(({ organizationId }: { organizationId: number
   return (
     <>
       <Flex justify="space-between" align="center">
-        <Title level={4} style={{ margin: 0 }}>
-          Предстоящие мероприятия
-        </Title>
+        <Flex vertical gap={0}>
+          {/* Кастомное название организации задаётся в настройках мини-аппа (OrgSettingsForm) и
+              нигде за пределами мини-аппа не используется — сообщения бота показывают только
+              реальное название чата из Telegram (см. getChatTitle в bot.ts). */}
+          {orgStore.org?.name && (
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              {orgStore.org.name}
+            </Text>
+          )}
+          <Title level={4} style={{ margin: 0 }}>
+            Предстоящие мероприятия
+          </Title>
+        </Flex>
         {canCreateEvents && (
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateEvent}>
             Создать
