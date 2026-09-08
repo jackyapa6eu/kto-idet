@@ -2,11 +2,11 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { ConfigProvider, Flex, Typography, Spin, Alert, theme as antdTheme } from 'antd'
 import ruRU from 'antd/locale/ru_RU'
 import { observer } from 'mobx-react-lite'
+import dayjs from 'dayjs'
+import 'dayjs/locale/ru'
 import { Header } from './components/Header'
 import { EventsList } from './components/EventsList'
 import { AppModal } from './components/AppModal'
-import { Landing } from './components/Landing'
-import './components/Landing.css'
 import { TelegramBotLoginButton } from './components/TelegramBotLoginButton'
 import { EventDetailsModalContent } from './components/EventDetailsModalContent'
 import { OrgSettingsForm, OrgSettingsButton } from './components/OrgSettingsForm'
@@ -14,11 +14,9 @@ import { userStore } from './stores/userStore'
 import { themeStore } from './stores/themeStore'
 import { modalStore } from './stores/modalStore'
 import { eventsStore } from './stores/eventsStore'
+import { getLinkContext, cleanUpDevQueryParams } from './linkContext'
 
-interface LinkContext {
-  modal: string
-  id: string
-}
+dayjs.locale('ru')
 
 function openModal(modal: string, id: string) {
   switch (modal) {
@@ -35,61 +33,18 @@ function openSettings(organizationId: number) {
   modalStore.open(<OrgSettingsForm organizationId={organizationId} />, 'Настройки группы')
 }
 
-// Ссылка t.me/<bot>/<app>?startapp=event-42 (или org-5 из кнопок бота в группе), по которой
-// бот присылает уведомления и по которой шарят мероприятия, передаёт "event-42" в
-// Telegram.WebApp.initDataUnsafe.start_param (а не в URL) — путь после короткого имени
-// мини-аппа Telegram не прокидывает.
-function parseStartParam(startParam: string): LinkContext | null {
-  const separatorIndex = startParam.indexOf('-')
-  if (separatorIndex === -1) return null
-  return { modal: startParam.slice(0, separatorIndex), id: startParam.slice(separatorIndex + 1) }
-}
-
-// Любая ссылка/кнопка, которая ведёт в мини-апп "из чата" (сводка, напоминание, шаринг
-// мероприятия), обязана нести в себе контекст — event-<id> или org-<id>. Если контекста нет
-// вообще (например, мини-апп открыли через постоянную кнопку меню бота или напрямую по
-// ссылке без параметров), это не "чат", а холодный визит — показываем Landing вместо
-// попытки сразу авторизовать и открыть список событий.
-function getLinkContext(): LinkContext | null {
-  const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
-  if (startParam) return parseStartParam(startParam)
-
-  // Вне Telegram (например, при локальной разработке в обычном браузере) то же самое
-  // можно передать явными query-параметрами страницы.
-  const params = new URLSearchParams(window.location.search)
-  const modal = params.get('modal')
-  const id = params.get('id')
-  return modal != null && id != null ? { modal, id } : null
-}
-
-function cleanUpDevQueryParams() {
-  const params = new URLSearchParams(window.location.search)
-  if (!params.has('modal') && !params.has('id')) return
-
-  params.delete('modal')
-  params.delete('id')
-  const query = params.toString()
-  window.history.replaceState(
-    null,
-    '',
-    `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`,
-  )
-}
-
 const AppContent = observer(() => {
-  const [linkContext] = useState(getLinkContext)
+  // App.tsx is only lazy-loaded by main.tsx when getLinkContext() is non-null (cold visitors
+  // without a chat/event context get <Landing/> straight from main.tsx, without this chunk).
+  const [linkContext] = useState(() => getLinkContext()!)
 
   // Открытие мероприятия по ссылке-шарингу не должно зависеть от того, участник ли человек
   // группы (GET /api/events/:id доступен всем авторизованным через Telegram) — поэтому эффект
   // висит здесь, а не внутри EventsList, которая для не-участников вообще не рендерится.
   useEffect(() => {
-    if (linkContext) openModal(linkContext.modal, linkContext.id)
+    openModal(linkContext.modal, linkContext.id)
     cleanUpDevQueryParams()
   }, [linkContext])
-
-  if (!linkContext) {
-    return <Landing />
-  }
 
   if (userStore.authLoading) {
     return (

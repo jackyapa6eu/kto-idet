@@ -56,6 +56,46 @@ const faq: { q: string; a: string }[] = [
   },
 ]
 
+// <-escaping guards against a literal "</script>" inside the JSON ever closing the tag
+// early — none of our current content has it, but data going into dangerouslySetInnerHTML
+// should never trust that to stay true.
+function jsonLd(data: object): string {
+  return JSON.stringify(data).replace(/</g, '\\u003c')
+}
+
+const structuredData = jsonLd({
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      name: 'Кто идёт',
+      url: 'https://kto-idet.ru/',
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'Кто идёт',
+      url: 'https://kto-idet.ru/',
+      description:
+        '«Кто идёт» — Telegram-бот для организации тренировок, игр и других мероприятий в вашей группе: запись участников, автоматическая сводка и напоминания.',
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Telegram',
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'RUB',
+      },
+    },
+    {
+      '@type': 'FAQPage',
+      mainEntity: faq.map(({ q, a }) => ({
+        '@type': 'Question',
+        name: q,
+        acceptedAnswer: { '@type': 'Answer', text: a },
+      })),
+    },
+  ],
+})
+
 function openBotChat() {
   const webApp = window.Telegram?.WebApp
   if (webApp) {
@@ -90,6 +130,7 @@ const CtaButton = ({ compact }: { compact?: boolean }) => (
 export const Landing = () => {
   return (
     <div className="landing">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: structuredData }} />
       <div className="landing__inner">
         <section className="landing__hero">
           <span className="landing__badge">✈️ Для Telegram-групп</span>
@@ -109,6 +150,7 @@ export const Landing = () => {
             width={1200}
             height={675}
             alt="Друзья на пляжном волейболе вместе смотрят расписание мероприятий в Telegram"
+            fetchPriority="high"
           />
         </section>
 
@@ -151,6 +193,7 @@ export const Landing = () => {
             height={80}
             alt=""
             aria-hidden="true"
+            loading="lazy"
           />
           <h2 className="landing__section-title">Частые вопросы</h2>
           <div className="landing__faq">
