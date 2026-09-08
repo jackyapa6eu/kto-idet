@@ -246,13 +246,19 @@ app.patch('/api/organizations/:id', telegramAuth, async (c) => {
   return c.json(organizationSettingsResponse(updated, isOwner, canManage))
 })
 
+// Общая проверка для личных инструментов владельца бота (дашборд статистики, лента мероприятий
+// для модерации) — единственный telegramId, заданный в ADMIN_TELEGRAM_ID, а не владение
+// конкретной организацией, т.к. эти ручки видят данные по всем организациям сразу.
+function isPlatformAdmin(telegramId: number | string): boolean {
+  const adminId = process.env.ADMIN_TELEGRAM_ID
+  return !!adminId && String(telegramId) === adminId
+}
+
 // Личный дашборд владельца бота (не путать с настройками отдельной организации выше) — сколько
-// всего чатов подключено и на какой они стадии. Доступ по ADMIN_TELEGRAM_ID, а не по владению
-// организацией, т.к. это статистика по всем организациям сразу, а не по одной.
+// всего чатов подключено и на какой они стадии.
 app.get('/api/admin/stats', telegramAuth, async (c) => {
   const tgUser = c.get('tgUser')
-  const adminId = process.env.ADMIN_TELEGRAM_ID
-  if (!adminId || String(tgUser.id) !== adminId) {
+  if (!isPlatformAdmin(tgUser.id)) {
     return c.json({ error: 'Доступ запрещён' }, 403)
   }
 
@@ -287,6 +293,61 @@ app.get('/api/admin/stats', telegramAuth, async (c) => {
   }
 
   return c.json({ counts, organizations: withTitles })
+})
+
+// Лента последних мероприятий по всем чатам сразу — чтобы можно было мельком пробежаться
+// глазами и заметить неподобающий контент (заголовок/описание), не заходя в каждый чат
+// по отдельности. Удаление — тем же DELETE /api/events/:id, что и у организатора события
+// (см. ниже, там же учтён ADMIN_TELEGRAM_ID как модераторский override).
+app.get('/api/admin/events', telegramAuth, async (c) => {
+  const tgUser = c.get('tgUser')
+  if (!isPlatformAdmin(tgUser.id)) {
+    return c.json({ error: 'Доступ запрещён' }, 403)
+  }
+
+  const limit = Math.min(Number(c.req.query('limit')) || 50, 200)
+  const db = getDb()
+  const rows = await db
+    .select({
+      id: events.id,
+      title: events.title,
+      description: events.description,
+      startsAt: events.startsAt,
+      createdAt: events.createdAt,
+      organizationId: events.organizationId,
+      organizationName: organizations.name,
+      organizationTelegramChatId: organizations.telegramChatId,
+      creatorFirstName: users.firstName,
+      creatorLastName: users.lastName,
+      creatorUsername: users.username,
+      participantsCount: count(participants.id),
+    })
+    .from(events)
+    .leftJoin(organizations, eq(events.organizationId, organizations.id))
+    .leftJoin(users, eq(users.telegramId, events.createdByTelegramId))
+    .leftJoin(participants, eq(participants.eventId, events.id))
+    .groupBy(
+      events.id,
+      organizations.name,
+      organizations.telegramChatId,
+      users.firstName,
+      users.lastName,
+      users.username,
+    )
+    .orderBy(desc(events.createdAt))
+    .limit(limit)
+
+  // Живое название чата — тот же принцип, что и в /api/admin/stats.
+  const withTitles = await Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      organizationName: row.organizationTelegramChatId
+        ? await getChatTitle(row.organizationTelegramChatId, row.organizationName ?? '—')
+        : (row.organizationName ?? '—'),
+    })),
+  )
+
+  return c.json({ events: withTitles })
 })
 
 const participantProfileColumns = {
@@ -477,7 +538,7 @@ app.delete('/api/events/:id', telegramAuth, async (c) => {
 
   const [event] = await db.select().from(events).where(eq(events.id, id))
   if (!event) return c.json({ error: 'Мероприятие не найдено' }, 404)
-  if (event.createdByTelegramId !== String(tgUser.id)) {
+  if (event.createdByTelegramId !== String(tgUser.id) && !isPlatformAdmin(tgUser.id)) {
     return c.json({ error: 'Удалить мероприятие может только организатор' }, 403)
   }
 

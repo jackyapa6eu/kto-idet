@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Flex, Spin, Alert, Statistic, Table, Tag } from 'antd'
+import { Flex, Spin, Alert, Statistic, Table, Tag, Tabs, Button, Popconfirm, Typography, message } from 'antd'
 import dayjs from 'dayjs'
 import { apiFetch, extractErrorMessage } from '../api'
+
+const { Text } = Typography
 
 interface AdminOrg {
   id: number
@@ -25,6 +27,20 @@ interface AdminStats {
   organizations: AdminOrg[]
 }
 
+interface AdminEvent {
+  id: number
+  title: string
+  description: string | null
+  startsAt: string
+  createdAt: string
+  organizationId: number | null
+  organizationName: string | null
+  creatorFirstName: string | null
+  creatorLastName: string | null
+  creatorUsername: string | null
+  participantsCount: number
+}
+
 const STATUS_LABELS: Record<string, { text: string; color: string }> = {
   active: { text: 'Активен', color: 'green' },
   setup_pending: { text: 'Настройка', color: 'gold' },
@@ -33,10 +49,7 @@ const STATUS_LABELS: Record<string, { text: string; color: string }> = {
   blocked: { text: 'Заблокирован', color: 'red' },
 }
 
-// Личный дашборд владельца бота — сколько чатов подключено и на какой они стадии. Доступ
-// проверяется на бэкенде по ADMIN_TELEGRAM_ID; сюда попадают через deep-link admin-0
-// (t.me/<bot>/app?startapp=admin-0), без отдельной кнопки в самом мини-аппе.
-export const AdminDashboard = () => {
+function OrganizationsTab() {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -114,5 +127,120 @@ export const AdminDashboard = () => {
         ]}
       />
     </Flex>
+  )
+}
+
+// Лента последних мероприятий по всем чатам — чтобы можно было мельком пробежаться глазами
+// по заголовкам/описаниям и заметить неподобающий контент, не заходя в каждый чат отдельно.
+// Разворачивание строки показывает полное описание; кнопка "Удалить" — сразу модерационное
+// действие (использует тот же DELETE /api/events/:id, что и у организатора события).
+function EventsTab() {
+  const [eventsList, setEventsList] = useState<AdminEvent[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch('/api/admin/events')
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await extractErrorMessage(res))
+        return res.json() as Promise<{ events: AdminEvent[] }>
+      })
+      .then((data) => {
+        if (!cancelled) setEventsList(data.events)
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (error) return <Alert type="error" showIcon message={error} />
+
+  if (!eventsList) {
+    return (
+      <Flex justify="center" style={{ padding: 24 }}>
+        <Spin />
+      </Flex>
+    )
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      const res = await apiFetch(`/api/events/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await extractErrorMessage(res))
+      setEventsList((prev) => prev?.filter((e) => e.id !== id) ?? null)
+      message.success('Мероприятие удалено')
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Не удалось удалить')
+    }
+  }
+
+  return (
+    <Table<AdminEvent>
+      dataSource={eventsList}
+      rowKey="id"
+      size="small"
+      pagination={{ pageSize: 20, hideOnSinglePage: true }}
+      scroll={{ x: true }}
+      expandable={{
+        rowExpandable: (row) => !!row.description,
+        expandedRowRender: (row) => <Text type="secondary">{row.description}</Text>,
+      }}
+      columns={[
+        { title: 'Чат', dataIndex: 'organizationName', ellipsis: true, render: (v) => v ?? '—' },
+        { title: 'Мероприятие', dataIndex: 'title', ellipsis: true },
+        {
+          title: 'Организатор',
+          key: 'creator',
+          ellipsis: true,
+          render: (_, row) =>
+            row.creatorUsername
+              ? `@${row.creatorUsername}`
+              : [row.creatorFirstName, row.creatorLastName].filter(Boolean).join(' ') || '—',
+        },
+        {
+          title: 'Дата',
+          dataIndex: 'startsAt',
+          width: 90,
+          render: (value: string) => dayjs(value).format('DD.MM.YY'),
+        },
+        { title: 'Участ.', dataIndex: 'participantsCount', width: 70, align: 'right' },
+        {
+          title: '',
+          key: 'actions',
+          width: 90,
+          render: (_, row) => (
+            <Popconfirm
+              title="Удалить мероприятие?"
+              okText="Удалить"
+              okButtonProps={{ danger: true }}
+              cancelText="Отмена"
+              onConfirm={() => handleDelete(row.id)}
+            >
+              <Button size="small" danger>
+                Удалить
+              </Button>
+            </Popconfirm>
+          ),
+        },
+      ]}
+    />
+  )
+}
+
+// Личный дашборд владельца бота — сколько чатов подключено, на какой они стадии, и лента
+// последних мероприятий для беглой модерации. Доступ проверяется на бэкенде по
+// ADMIN_TELEGRAM_ID; сюда попадают через deep-link admin-0 (t.me/<bot>/app?startapp=admin-0),
+// без отдельной кнопки в самом мини-аппе.
+export const AdminDashboard = () => {
+  return (
+    <Tabs
+      items={[
+        { key: 'orgs', label: 'Чаты', children: <OrganizationsTab /> },
+        { key: 'events', label: 'Мероприятия', children: <EventsTab /> },
+      ]}
+    />
   )
 }
