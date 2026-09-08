@@ -19,6 +19,13 @@ const LOGIN_PAYLOAD_PREFIX = 'login-'
 
 const BACK_BUTTON_TEXT = '🏠 В начало'
 
+// Единственный telegramId, заданный в ADMIN_TELEGRAM_ID, — владелец бота, а не какой-то
+// организации. Используется и здесь (кнопка в меню), и в index.ts (доступ к /api/admin/*).
+export function isPlatformAdmin(telegramId: number | string): boolean {
+  const adminId = process.env.ADMIN_TELEGRAM_ID
+  return !!adminId && String(telegramId) === adminId
+}
+
 const ONBOARDING_TEXT =
   'Помогаю организовывать мероприятия в вашей Telegram-группе — тренировки, игры, квизы.\n\n' +
   '👉 Добавьте меня в группу и сделайте администратором.'
@@ -357,9 +364,20 @@ interface MenuView {
 // возвращаться); одна группа — сразу её текущий шаг визарда; несколько — список для выбора.
 async function buildEntryView(telegramId: number): Promise<MenuView> {
   const orgs = await getManagedOrganizations(telegramId)
-  if (orgs.length === 0) return { text: ONBOARDING_TEXT, keyboard: new InlineKeyboard() }
-  if (orgs.length === 1) return computeOrgWizardView(orgs[0])
-  return buildRootMenuView(orgs)
+  const view =
+    orgs.length === 0
+      ? { text: ONBOARDING_TEXT, keyboard: new InlineKeyboard() }
+      : orgs.length === 1
+        ? await computeOrgWizardView(orgs[0])
+        : await buildRootMenuView(orgs)
+
+  // Кнопка видна только владельцу бота — не привязана к конкретной организации, поэтому
+  // добавляется поверх любого варианта меню выше, а не внутри одной из веток.
+  if (isPlatformAdmin(telegramId)) {
+    view.keyboard.row().url('📊 Статистика бота', buildMiniAppLink('admin-0'))
+  }
+
+  return view
 }
 
 async function buildRootMenuView(orgs: (typeof organizations.$inferSelect)[]): Promise<MenuView> {

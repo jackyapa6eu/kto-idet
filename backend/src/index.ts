@@ -16,6 +16,7 @@ import {
   isChatAdmin,
   purgeExpiredOrganizations,
   getChatTitle,
+  isPlatformAdmin,
 } from './bot.js'
 import { upsertUser } from './users.js'
 import { validateInitData } from './telegramAuth.js'
@@ -245,14 +246,6 @@ app.patch('/api/organizations/:id', telegramAuth, async (c) => {
 
   return c.json(organizationSettingsResponse(updated, isOwner, canManage))
 })
-
-// Общая проверка для личных инструментов владельца бота (дашборд статистики, лента мероприятий
-// для модерации) — единственный telegramId, заданный в ADMIN_TELEGRAM_ID, а не владение
-// конкретной организацией, т.к. эти ручки видят данные по всем организациям сразу.
-function isPlatformAdmin(telegramId: number | string): boolean {
-  const adminId = process.env.ADMIN_TELEGRAM_ID
-  return !!adminId && String(telegramId) === adminId
-}
 
 // Личный дашборд владельца бота (не путать с настройками отдельной организации выше) — сколько
 // всего чатов подключено и на какой они стадии.
