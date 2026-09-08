@@ -1,5 +1,7 @@
 const BOT_USERNAME = 'kto_idet_bot'
 const BOT_URL = `https://t.me/${BOT_USERNAME}`
+const DEVELOPER_USERNAME = 'jackyapa6eu'
+const DEVELOPER_URL = `https://t.me/${DEVELOPER_USERNAME}`
 
 const features = [
   {
@@ -278,6 +280,13 @@ export const Landing = () => {
               @{BOT_USERNAME}
             </a>{' '}
             · «Кто идёт», {new Date().getFullYear()}
+          </p>
+          <p className="landing__footer-note">
+            Сделал{' '}
+            <a href={DEVELOPER_URL} target="_blank" rel="noopener noreferrer">
+              @{DEVELOPER_USERNAME}
+            </a>{' '}
+            — пишите, если есть предложения или пожелания. Спасибо, что пользуетесь ботом! 🙏
           </p>
         </section>
       </main>

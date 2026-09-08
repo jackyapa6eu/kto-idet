@@ -9,7 +9,9 @@ import { EventDetailsModalContent } from './EventDetailsModalContent'
 import { CreateEventForm } from './CreateEventForm'
 import { formatEventDate } from '../utils/formatEventDate'
 
-const { Title, Text } = Typography
+const { Title, Text, Link } = Typography
+
+const DEVELOPER_USERNAME = 'jackyapa6eu'
 
 function openEventDetails(event: EventItem) {
   modalStore.open(<EventDetailsModalContent eventId={event.id} />, event.title)
@@ -99,6 +101,13 @@ export const EventsList = observer(({ organizationId }: { organizationId: number
           )
         })}
       </Flex>
+      <Text type="secondary" style={{ fontSize: 12, textAlign: 'center' }}>
+        Есть пожелания или предложения? Пишите{' '}
+        <Link href={`https://t.me/${DEVELOPER_USERNAME}`} target="_blank">
+          @{DEVELOPER_USERNAME}
+        </Link>{' '}
+        — спасибо, что пользуетесь ботом! 🙏
+      </Text>
     </>
   )
 })
