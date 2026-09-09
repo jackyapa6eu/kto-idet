@@ -125,6 +125,9 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
   const isConfirmed = event.participants.some((p) => p.telegramId === userStore.telegramId)
   const isInReserve = event.reserve.some((p) => p.telegramId === userStore.telegramId)
   const isParticipant = isConfirmed || isInReserve
+  // Держим в синхроне с LEAVE_CUTOFF_MS на бэкенде (index.ts) — чтобы не давать нажать кнопку
+  // впустую и получить ошибку с сервера.
+  const isPastLeaveCutoff = new Date(event.startsAt).getTime() - Date.now() < 6 * 60 * 60 * 1000
 
   const handleJoin = async () => {
     setActing(true)
@@ -141,8 +144,8 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
     setActing(true)
     try {
       await eventsStore.leaveEvent(event.id)
-    } catch {
-      message.error('Не удалось отменить участие')
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Не удалось отменить участие')
     } finally {
       setActing(false)
     }
@@ -283,9 +286,22 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
         ) : isOrganizer ? (
           <Typography.Text type="secondary">Вы организатор этого мероприятия</Typography.Text>
         ) : isParticipant ? (
-          <Button danger block loading={acting} onClick={handleLeave}>
-            {isInReserve ? 'Покинуть резерв' : 'Не участвовать'}
-          </Button>
+          <Flex vertical gap={4}>
+            <Button
+              danger
+              block
+              loading={acting}
+              disabled={isPastLeaveCutoff}
+              onClick={handleLeave}
+            >
+              {isInReserve ? 'Покинуть резерв' : 'Не участвовать'}
+            </Button>
+            {isPastLeaveCutoff && (
+              <Typography.Text type="secondary" style={{ textAlign: 'center' }}>
+                Отменить участие можно не позднее чем за 6 часов до начала
+              </Typography.Text>
+            )}
+          </Flex>
         ) : (
           <Button type="primary" block loading={acting} onClick={handleJoin}>
             {isFull ? 'Записаться в резерв' : 'Участвовать'}

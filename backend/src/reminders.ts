@@ -2,6 +2,7 @@ import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm'
 import { getDb } from './db/index.js'
 import { events, participants, users, eventReminders, organizations } from './db/schema.js'
 import { getBot } from './bot.js'
+import { splitParticipants } from './eventParticipants.js'
 
 const REMINDER_LEAD_MIN_MS = 30 * 60 * 1000
 const REMINDER_LEAD_MAX_MS = 90 * 60 * 1000
@@ -31,6 +32,7 @@ export async function sendDueReminders(): Promise<number> {
       title: events.title,
       location: events.location,
       court: events.court,
+      maxParticipants: events.maxParticipants,
       reminderChatId: organizations.reminderChatId,
       reminderThreadId: organizations.reminderThreadId,
       notificationsEnabled: organizations.notificationsEnabled,
@@ -62,7 +64,10 @@ export async function sendDueReminders(): Promise<number> {
       .where(eq(participants.eventId, event.id))
       .orderBy(asc(participants.joinedAt))
 
-    const mentions = eventParticipants.map(mention).join(' ')
+    // Резервисты не тегаются — у них нет гарантированного места, звать их «вы придёте?»
+    // было бы вводящим в заблуждение.
+    const { confirmed } = splitParticipants(eventParticipants, event.maxParticipants)
+    const mentions = confirmed.map(mention).join(' ')
     const text = [
       `⏰ Скоро <b>${escapeHtml(event.title)}</b>!`,
       `Место: ${escapeHtml(event.location ?? '')}`,

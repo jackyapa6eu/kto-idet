@@ -57,6 +57,7 @@ async function notifyEventUpdated(event: typeof events.$inferSelect) {
 
 const JWT_TTL_SECONDS = 30 * 24 * 60 * 60 // 30 дней — веб-сессия после логина через бота
 const LOGIN_SESSION_TTL_SECONDS = 10 * 60 // 10 минут на переход в Telegram и подтверждение
+const LEAVE_CUTOFF_MS = 6 * 60 * 60 * 1000 // за 6 часов до начала отменить участие уже нельзя
 
 const app = new Hono<{ Variables: { tgUser: { id: number } } }>()
 
@@ -593,6 +594,9 @@ app.delete('/api/events/:id/participants', telegramAuth, async (c) => {
   if (!event) return c.json({ error: 'Мероприятие не найдено' }, 404)
   if (event.createdByTelegramId === telegramId) {
     return c.json({ error: 'Организатор не может отменить участие в своём мероприятии' }, 400)
+  }
+  if (event.startsAt.getTime() - Date.now() < LEAVE_CUTOFF_MS) {
+    return c.json({ error: 'Нельзя отменить участие менее чем за 6 часов до начала мероприятия' }, 400)
   }
 
   await db
