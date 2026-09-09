@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm'
 import { getDb } from './db/index.js'
-import { events, participants, users, eventReminders } from './db/schema.js'
+import { events, participants, users, eventReminders, organizations } from './db/schema.js'
 import { getBot } from './bot.js'
 
 const REMINDER_LEAD_MIN_MS = 30 * 60 * 1000
@@ -18,20 +18,26 @@ function mention(p: { telegramId: string; firstName: string; lastName: string | 
 // Внешний крон дёргает /api/cron/reminders раз в 30 минут и проверяет, какие события попали
 // в окно "от 30 до 90 минут до начала" — окно шире шага крона, поэтому даже пропуск одного
 // запуска крона не даст событию проскочить незамеченным. Дубли исключает eventReminders.
+// Чат/топик для напоминания берём per-org из organizations (аналогично digest.ts) — событие
+// без organizationId или организации без настроенного reminderChatId просто пропускаем, не
+// прерывая обработку остальных событий.
 export async function sendDueReminders(): Promise<number> {
-  const chatId = process.env.TELEGRAM_REMINDER_CHAT_ID
-  if (!chatId) return 0
-
-  const threadIdRaw = process.env.TELEGRAM_REMINDER_THREAD_ID
-  const messageThreadId = threadIdRaw ? Number(threadIdRaw) : undefined
-
   const db = getDb()
   const now = new Date()
 
   const due = await db
-    .select({ id: events.id, title: events.title, location: events.location, court: events.court })
+    .select({
+      id: events.id,
+      title: events.title,
+      location: events.location,
+      court: events.court,
+      reminderChatId: organizations.reminderChatId,
+      reminderThreadId: organizations.reminderThreadId,
+      notificationsEnabled: organizations.notificationsEnabled,
+    })
     .from(events)
     .leftJoin(eventReminders, eq(eventReminders.eventId, events.id))
+    .innerJoin(organizations, eq(organizations.id, events.organizationId))
     .where(
       and(
         gt(events.startsAt, new Date(now.getTime() + REMINDER_LEAD_MIN_MS)),
@@ -44,8 +50,11 @@ export async function sendDueReminders(): Promise<number> {
   if (due.length === 0) return 0
 
   const bot = getBot()
+  let sentCount = 0
 
   for (const event of due) {
+    if (!event.reminderChatId || !event.notificationsEnabled) continue
+
     const eventParticipants = await db
       .select({ telegramId: users.telegramId, firstName: users.firstName, lastName: users.lastName })
       .from(participants)
@@ -62,13 +71,14 @@ export async function sendDueReminders(): Promise<number> {
       'Ставьте реакции на сообщении 👇',
     ].join('\n')
 
-    await bot.api.sendMessage(chatId, text, {
+    await bot.api.sendMessage(event.reminderChatId, text, {
       parse_mode: 'HTML',
-      message_thread_id: messageThreadId,
+      message_thread_id: event.reminderThreadId ?? undefined,
     })
 
     await db.insert(eventReminders).values({ eventId: event.id }).onConflictDoNothing()
+    sentCount++
   }
 
-  return due.length
+  return sentCount
 }
