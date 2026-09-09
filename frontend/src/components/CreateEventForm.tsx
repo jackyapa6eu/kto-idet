@@ -71,8 +71,9 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
         message.success('Мероприятие создано')
       }
       modalStore.close()
-    } catch {
-      message.error(isEditing ? 'Не удалось обновить мероприятие' : 'Не удалось создать мероприятие')
+    } catch (e) {
+      const fallback = isEditing ? 'Не удалось обновить мероприятие' : 'Не удалось создать мероприятие'
+      message.error(e instanceof Error ? e.message : fallback)
     }
   }
 

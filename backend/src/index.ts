@@ -5,7 +5,7 @@ import type { Context, Next } from 'hono'
 import { cors } from 'hono/cors'
 import { sign, verify } from 'hono/jwt'
 import { webhookCallback } from 'grammy'
-import { and, asc, count, desc, eq } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte } from 'drizzle-orm'
 import { getDb } from './db/index.js'
 import { events, participants, users, loginSessions, organizations } from './db/schema.js'
 import {
@@ -23,6 +23,7 @@ import { validateInitData } from './telegramAuth.js'
 import { syncChannelDigest, sendEventCreatedNotification, updateEventNotification } from './digest.js'
 import { sendDueReminders } from './reminders.js'
 import { splitParticipants } from './eventParticipants.js'
+import { startOfMonthInEventsTimeZone } from './timezone.js'
 
 // Обновление сводки в топике не должно ронять основной запрос, если Telegram недоступен.
 // organizationId может быть null у мероприятий, созданных до перехода на мультитенантность —
@@ -58,6 +59,7 @@ async function notifyEventUpdated(event: typeof events.$inferSelect) {
 const JWT_TTL_SECONDS = 30 * 24 * 60 * 60 // 30 дней — веб-сессия после логина через бота
 const LOGIN_SESSION_TTL_SECONDS = 10 * 60 // 10 минут на переход в Telegram и подтверждение
 const LEAVE_CUTOFF_MS = 6 * 60 * 60 * 1000 // за 6 часов до начала отменить участие уже нельзя
+const FREE_TIER_MONTHLY_EVENT_LIMIT = 5 // бесплатный тариф: столько мероприятий можно создать в месяц
 
 const app = new Hono<{ Variables: { tgUser: { id: number } } }>()
 
@@ -406,6 +408,23 @@ app.post('/api/events', telegramAuth, async (c) => {
   }
 
   const db = getDb()
+
+  const isPaid = org.paidUntil != null && org.paidUntil.getTime() > Date.now()
+  if (!isPaid) {
+    const [{ value: createdThisMonth }] = await db
+      .select({ value: count() })
+      .from(events)
+      .where(and(eq(events.organizationId, org.id), gte(events.createdAt, startOfMonthInEventsTimeZone())))
+    if (createdThisMonth >= FREE_TIER_MONTHLY_EVENT_LIMIT) {
+      return c.json(
+        {
+          error: `На бесплатном тарифе можно создать не больше ${FREE_TIER_MONTHLY_EVENT_LIMIT} мероприятий в месяц`,
+        },
+        402,
+      )
+    }
+  }
+
   const [created] = await db
     .insert(events)
     .values({

@@ -4,18 +4,7 @@ import { getDb } from './db/index.js'
 import { events, participants, users, organizations } from './db/schema.js'
 import { getBot, buildMiniAppLink } from './bot.js'
 import { splitParticipants } from './eventParticipants.js'
-
-const EVENTS_TIME_ZONE = 'Asia/Krasnoyarsk'
-
-function startOfTodayInEventsTimeZone(): Date {
-  const todayStr = new Intl.DateTimeFormat('en-CA', {
-    timeZone: EVENTS_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-  return new Date(`${todayStr}T00:00:00+07:00`)
-}
+import { EVENTS_TIME_ZONE, startOfTodayInEventsTimeZone } from './timezone.js'
 
 function formatEventDate(date: Date): string {
   const weekdayRaw = new Intl.DateTimeFormat('ru-RU', { timeZone: EVENTS_TIME_ZONE, weekday: 'long' }).format(date)

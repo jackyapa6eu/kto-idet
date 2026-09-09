@@ -44,6 +44,12 @@ export const organizations = pgTable('organizations', {
   // По умолчанию — только владелец/админы чата (см. isChatAdmin), чтобы не заваливать
   // группу случайными мероприятиями от кого попало; включается в настройках в мини-аппе.
   membersCanCreateEvents: boolean('members_can_create_events').default(false).notNull(),
+  // null/прошлое — бесплатный тариф (лимит FREE_TIER_MONTHLY_EVENT_LIMIT на создание
+  // мероприятий в месяц, см. index.ts); дата в будущем — оплачено до этой даты включительно.
+  // Пока нет автосписания — продлевается вручную; для "оплачено навсегда" ставим дату сильно
+  // в будущем, а не отдельный булевый флаг, чтобы не заводить два источника истины, когда
+  // появится настоящий биллинг с почётным сроком подписки.
+  paidUntil: timestamp('paid_until', { withTimezone: true }),
   status: text('status').notNull().default('setup_pending'),
   // Не null только при status = 'removed' — момент, когда организацию и её события
   // окончательно удалит purgeExpiredOrganizations, если бота не добавят обратно раньше.
