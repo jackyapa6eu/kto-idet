@@ -9,6 +9,7 @@ export interface OrganizationSettings {
   isOwner: boolean
   canManage: boolean
   canCreateEvents: boolean
+  isPaid: boolean
 }
 
 export type OrganizationSettingsPatch = Partial<

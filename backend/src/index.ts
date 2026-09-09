@@ -22,6 +22,7 @@ import { upsertUser } from './users.js'
 import { validateInitData } from './telegramAuth.js'
 import { syncChannelDigest, sendEventCreatedNotification, updateEventNotification } from './digest.js'
 import { sendDueReminders } from './reminders.js'
+import { generateNextRepeatingEvents } from './eventRepeat.js'
 import { splitParticipants } from './eventParticipants.js'
 import { startOfMonthInEventsTimeZone } from './timezone.js'
 
@@ -96,6 +97,10 @@ async function telegramAuth(c: Context, next: Next) {
 
   c.set('tgUser', { id: tgUser.id })
   await next()
+}
+
+function isOrgPaid(org: { paidUntil: Date | null }): boolean {
+  return org.paidUntil != null && org.paidUntil.getTime() > Date.now()
 }
 
 // Тенант = организация (Telegram-группа тренера). Список и создание событий — per-org,
@@ -199,6 +204,7 @@ function organizationSettingsResponse(
     name: org.name,
     notificationsEnabled: org.notificationsEnabled,
     membersCanCreateEvents: org.membersCanCreateEvents,
+    isPaid: isOrgPaid(org),
     isOwner,
     canManage,
     canCreateEvents: org.membersCanCreateEvents || canManage,
@@ -393,6 +399,7 @@ app.post('/api/events', telegramAuth, async (c) => {
     paymentPhone?: string
     bank?: string
     comment?: string
+    repeatWeekly?: boolean
   }>()
 
   if (!body.organizationId || !body.title || !body.location || !body.startsAt) {
@@ -408,8 +415,12 @@ app.post('/api/events', telegramAuth, async (c) => {
   }
 
   const db = getDb()
+  const isPaid = isOrgPaid(org)
 
-  const isPaid = org.paidUntil != null && org.paidUntil.getTime() > Date.now()
+  if (body.repeatWeekly && !isPaid) {
+    return c.json({ error: 'Повторяющиеся мероприятия доступны только на платном тарифе' }, 402)
+  }
+
   if (!isPaid) {
     const [{ value: createdThisMonth }] = await db
       .select({ value: count() })
@@ -440,6 +451,7 @@ app.post('/api/events', telegramAuth, async (c) => {
       bank: body.bank ?? null,
       comment: body.comment ?? null,
       createdByTelegramId: telegramId,
+      repeatEveryDays: body.repeatWeekly ? 7 : null,
     })
     .returning()
 
@@ -517,10 +529,24 @@ app.put('/api/events/:id', telegramAuth, async (c) => {
     paymentPhone?: string
     bank?: string
     comment?: string
+    repeatWeekly?: boolean
   }>()
 
   if (!body.title || !body.location || !body.startsAt) {
     return c.json({ error: 'title, location и startsAt обязательны' }, 400)
+  }
+
+  // Включение повтора при редактировании — та же платная проверка, что и при создании.
+  // Выключение (repeatWeekly не передан/false) разрешено всегда — это и есть механизм
+  // "остановить повтор": цепочка просто перестаёт продолжаться дальше этого события.
+  if (body.repeatWeekly) {
+    const org =
+      event.organizationId != null
+        ? (await db.select().from(organizations).where(eq(organizations.id, event.organizationId)))[0]
+        : undefined
+    if (!org || !isOrgPaid(org)) {
+      return c.json({ error: 'Повторяющиеся мероприятия доступны только на платном тарифе' }, 402)
+    }
   }
 
   const [updated] = await db
@@ -536,6 +562,7 @@ app.put('/api/events/:id', telegramAuth, async (c) => {
       paymentPhone: body.paymentPhone ?? null,
       bank: body.bank ?? null,
       comment: body.comment ?? null,
+      repeatEveryDays: body.repeatWeekly ? 7 : null,
     })
     .where(eq(events.id, id))
     .returning()
@@ -636,7 +663,8 @@ app.post('/api/cron/reminders', async (c) => {
   }
 
   const sent = await sendDueReminders()
-  return c.json({ ok: true, sent })
+  const repeated = await generateNextRepeatingEvents()
+  return c.json({ ok: true, sent, repeated })
 })
 
 // Дёргается тем же внешним кроном (можно раз в сутки — тут нет чувствительности к частоте,

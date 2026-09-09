@@ -78,6 +78,13 @@ export const events = pgTable('events', {
   // id сообщения "🆕 Новое мероприятие!" в топике напоминаний — редактируется на месте при
   // изменении события (см. digest.ts), а не рассылается заново.
   notificationMessageId: integer('notification_message_id'),
+  // null — разовое мероприятие. Число — через сколько дней после startsAt должно появиться
+  // следующее в цепочке повторов (сейчас всегда 7 — «каждую неделю», см. eventRepeat.ts).
+  // Платная фича — включается только для organizations.paidUntil в будущем (см. index.ts).
+  repeatEveryDays: integer('repeat_every_days'),
+  // true — следующее звено цепочки уже сгенерировано из этого события, крону
+  // (generateNextRepeatingEvents) больше не нужно его рассматривать.
+  nextEventCreated: boolean('next_event_created').default(false).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 

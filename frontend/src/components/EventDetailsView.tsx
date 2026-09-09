@@ -13,6 +13,7 @@ import {
 import { eventsStore } from '../stores/eventsStore'
 import { userStore } from '../stores/userStore'
 import { modalStore } from '../stores/modalStore'
+import { orgStore } from '../stores/orgStore'
 import { formatEventDate } from '../utils/formatEventDate'
 import { CreateEventForm } from './CreateEventForm'
 import { TelegramBotLoginButton } from './TelegramBotLoginButton'
@@ -104,6 +105,13 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
   }, [eventId])
 
   const event = eventsStore.selectedEvent
+
+  // Нужен orgStore.org.isPaid для тумблера "повторять" в форме редактирования (см.
+  // CreateEventForm) — EventsList грузит его сам, но сюда можно попасть и напрямую по
+  // shared-ссылке на мероприятие, минуя список.
+  useEffect(() => {
+    if (event?.organizationId != null) orgStore.fetchOrganization(event.organizationId)
+  }, [event?.organizationId])
 
   if (eventsStore.selectedEventError) {
     return <Alert type="error" message={eventsStore.selectedEventError} showIcon />

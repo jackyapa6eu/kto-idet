@@ -39,6 +39,9 @@ export interface EventDetails {
   participants: EventParticipant[]
   reserve: EventParticipant[]
   shareUrl: string
+  // null — разовое мероприятие; число — раз в сколько дней создаётся следующее в цепочке
+  // (сейчас всегда 7). Платная фича, см. CreateEventForm.
+  repeatEveryDays: number | null
 }
 
 export interface CreateEventInput {
@@ -52,6 +55,7 @@ export interface CreateEventInput {
   paymentPhone?: string
   bank?: string
   comment?: string
+  repeatWeekly?: boolean
 }
 
 export type UpdateEventInput = CreateEventInput

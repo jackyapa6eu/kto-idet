@@ -1,8 +1,9 @@
 import { observer } from 'mobx-react-lite'
-import { Form, Input, DatePicker, TimePicker, InputNumber, Button, message } from 'antd'
+import { Form, Input, DatePicker, TimePicker, InputNumber, Switch, Button, Typography, message } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { eventsStore, type EventDetails } from '../stores/eventsStore'
 import { modalStore } from '../stores/modalStore'
+import { orgStore } from '../stores/orgStore'
 
 function disabledDate(date: Dayjs) {
   return date.isBefore(dayjs().startOf('day'))
@@ -20,6 +21,7 @@ interface EventFormValues {
   paymentPhone?: string
   bank?: string
   comment?: string
+  repeatWeekly?: boolean
 }
 
 export const CreateEventForm = observer(({ event }: { event?: EventDetails }) => {
@@ -39,8 +41,11 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
         paymentPhone: event.paymentPhone ?? undefined,
         bank: event.bank ?? undefined,
         comment: event.comment ?? undefined,
+        repeatWeekly: event.repeatEveryDays != null,
       }
     : undefined
+
+  const isPaid = orgStore.org?.isPaid ?? false
 
   const handleFinish = async (values: EventFormValues) => {
     const startsAt = values.date
@@ -60,6 +65,7 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
       paymentPhone: values.paymentPhone,
       bank: values.bank,
       comment: values.comment,
+      repeatWeekly: values.repeatWeekly,
     }
 
     try {
@@ -111,6 +117,14 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
       </Form.Item>
       <Form.Item name="comment" label="Комментарий">
         <Input.TextArea placeholder="Необязательно" autoSize={{ minRows: 2 }} />
+      </Form.Item>
+      <Form.Item
+        name="repeatWeekly"
+        label="Повторять каждую неделю"
+        valuePropName="checked"
+        extra={!isPaid && <Typography.Text type="secondary">Доступно на платном тарифе</Typography.Text>}
+      >
+        <Switch disabled={!isPaid} />
       </Form.Item>
       <Form.Item>
         <Button
