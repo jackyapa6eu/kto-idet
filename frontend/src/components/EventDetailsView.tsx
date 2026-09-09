@@ -21,6 +21,43 @@ function participantName(p: { firstName: string; lastName: string | null }) {
   return [p.firstName, p.lastName].filter(Boolean).join(' ')
 }
 
+// tg://user?id=<id> — та же ссылка на профиль, что используется в сообщениях бота
+// (см. digest.ts): открывает профиль по id, работает даже без @username.
+function ParticipantRow({
+  participant,
+  isOrganizer,
+  onTogglePaid,
+}: {
+  participant: { telegramId: string; firstName: string; lastName: string | null; photoUrl: string | null; paid: boolean }
+  isOrganizer: boolean
+  onTogglePaid: (telegramId: string, paid: boolean) => void
+}) {
+  return (
+    <Flex align="center" justify="space-between" gap={8}>
+      <a
+        href={`tg://user?id=${participant.telegramId}`}
+        style={{ color: 'inherit', textDecoration: 'none' }}
+      >
+        <Flex align="center" gap={8}>
+          <Avatar src={participant.photoUrl} icon={<UserOutlined />} size="small" />
+          <Typography.Text>
+            {participantName(participant)}
+            {participant.paid && ' 💰'}
+          </Typography.Text>
+        </Flex>
+      </a>
+      {isOrganizer && (
+        <Checkbox
+          checked={participant.paid}
+          onChange={(e) => onTogglePaid(participant.telegramId, e.target.checked)}
+        >
+          Оплачено
+        </Checkbox>
+      )}
+    </Flex>
+  )
+}
+
 // Показывает ссылку текстом, чтобы скопировать вручную — сюда попадаем, если Clipboard API
 // недоступен (например, в вебвью Telegram он может быть запрещён политикой разрешений).
 function showShareLinkModal(url: string) {
@@ -80,9 +117,14 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
     )
   }
 
-  const isFull = event.maxParticipants != null && event.participants.length >= event.maxParticipants
+  const isFull =
+    event.maxParticipants != null &&
+    event.maxParticipants > 0 &&
+    event.participants.length >= event.maxParticipants
   const isOrganizer = userStore.telegramId === event.createdByTelegramId
-  const isParticipant = event.participants.some((p) => p.telegramId === userStore.telegramId)
+  const isConfirmed = event.participants.some((p) => p.telegramId === userStore.telegramId)
+  const isInReserve = event.reserve.some((p) => p.telegramId === userStore.telegramId)
+  const isParticipant = isConfirmed || isInReserve
 
   const handleJoin = async () => {
     setActing(true)
@@ -189,7 +231,7 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
           }
         >
           <Tag color={isFull ? 'default' : 'green'}>
-            {event.maxParticipants != null
+            {event.maxParticipants != null && event.maxParticipants > 0
               ? `${event.participants.length}/${event.maxParticipants}`
               : event.participants.length}
           </Tag>
@@ -199,27 +241,36 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
       <Flex vertical gap={8}>
         <Typography.Text strong>Участники</Typography.Text>
         <Flex vertical gap={8}>
-          {event.participants.map((p) => (
-            <Flex key={p.telegramId} align="center" justify="space-between" gap={8}>
-              <Flex align="center" gap={8}>
-                <Avatar src={p.photoUrl} icon={<UserOutlined />} size="small" />
-                <Typography.Text>
-                  {participantName(p)}
-                  {p.paid && ' 💰'}
-                </Typography.Text>
-              </Flex>
-              {isOrganizer && (
-                <Checkbox
-                  checked={p.paid}
-                  onChange={(e) => handleTogglePaid(p.telegramId, e.target.checked)}
-                >
-                  Оплачено
-                </Checkbox>
-              )}
-            </Flex>
-          ))}
+          {event.participants.length > 0 ? (
+            event.participants.map((p) => (
+              <ParticipantRow
+                key={p.telegramId}
+                participant={p}
+                isOrganizer={isOrganizer}
+                onTogglePaid={handleTogglePaid}
+              />
+            ))
+          ) : (
+            <Typography.Text type="secondary">Пока никого</Typography.Text>
+          )}
         </Flex>
       </Flex>
+
+      {event.reserve.length > 0 && (
+        <Flex vertical gap={8}>
+          <Typography.Text strong>Резерв</Typography.Text>
+          <Flex vertical gap={8}>
+            {event.reserve.map((p) => (
+              <ParticipantRow
+                key={p.telegramId}
+                participant={p}
+                isOrganizer={isOrganizer}
+                onTogglePaid={handleTogglePaid}
+              />
+            ))}
+          </Flex>
+        </Flex>
+      )}
 
       <Flex vertical gap={8}>
         {!userStore.isAuthenticated ? (
@@ -233,11 +284,11 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
           <Typography.Text type="secondary">Вы организатор этого мероприятия</Typography.Text>
         ) : isParticipant ? (
           <Button danger block loading={acting} onClick={handleLeave}>
-            Не участвовать
+            {isInReserve ? 'Покинуть резерв' : 'Не участвовать'}
           </Button>
         ) : (
-          <Button type="primary" block loading={acting} disabled={isFull} onClick={handleJoin}>
-            {isFull ? 'Мест нет' : 'Участвовать'}
+          <Button type="primary" block loading={acting} onClick={handleJoin}>
+            {isFull ? 'Записаться в резерв' : 'Участвовать'}
           </Button>
         )}
       </Flex>

@@ -64,8 +64,8 @@ export const EventsList = observer(({ organizationId }: { organizationId: number
       {eventsStore.error && <Alert type="error" message={eventsStore.error} showIcon />}
       <Flex vertical gap={8}>
         {eventsStore.events.map((event) => {
-          const isFull =
-            event.maxParticipants != null && event.participantsCount >= event.maxParticipants
+          const hasLimit = event.maxParticipants != null && event.maxParticipants > 0
+          const isFull = hasLimit && event.participantsCount >= event.maxParticipants!
           return (
             <Card key={event.id} hoverable onClick={() => openEventDetails(event)}>
               <Flex vertical gap={8}>
@@ -80,9 +80,7 @@ export const EventsList = observer(({ organizationId }: { organizationId: number
                     </Text>
                   </Flex>
                   <Tag icon={<TeamOutlined />} color={isFull ? 'default' : 'green'}>
-                    {event.maxParticipants != null
-                      ? `${event.participantsCount}/${event.maxParticipants}`
-                      : event.participantsCount}
+                    {hasLimit ? `${event.participantsCount}/${event.maxParticipants}` : event.participantsCount}
                   </Tag>
                 </Flex>
                 <Flex justify="end">

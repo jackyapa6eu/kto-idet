@@ -37,6 +37,7 @@ export interface EventDetails {
   createdByTelegramId: string
   organizer: EventParticipant
   participants: EventParticipant[]
+  reserve: EventParticipant[]
   shareUrl: string
 }
 
@@ -176,7 +177,10 @@ class EventsStore {
   // Оптимистично меняем локально — полный refetch дёрнул бы selectedEventLoading и мигнул
   // бы спиннером поверх всего списка участников ради одного чекбокса.
   async setParticipantPaid(eventId: number, telegramId: string, paid: boolean) {
-    const participant = this.selectedEvent?.participants.find((p) => p.telegramId === telegramId)
+    const participant = [
+      ...(this.selectedEvent?.participants ?? []),
+      ...(this.selectedEvent?.reserve ?? []),
+    ].find((p) => p.telegramId === telegramId)
     const previous = participant?.paid
     if (participant) {
       runInAction(() => {

@@ -22,6 +22,7 @@ import { upsertUser } from './users.js'
 import { validateInitData } from './telegramAuth.js'
 import { syncChannelDigest, sendEventCreatedNotification, updateEventNotification } from './digest.js'
 import { sendDueReminders } from './reminders.js'
+import { splitParticipants } from './eventParticipants.js'
 
 // Обновление сводки в топике не должно ронять основной запрос, если Telegram недоступен.
 // organizationId может быть null у мероприятий, созданных до перехода на мультитенантность —
@@ -452,6 +453,8 @@ app.get('/api/events/:id', async (c) => {
     .where(eq(participants.eventId, id))
     .orderBy(asc(participants.joinedAt))
 
+  const { confirmed, reserve } = splitParticipants(eventParticipants, event.maxParticipants)
+
   return c.json({
     ...event,
     organizer: organizer ?? {
@@ -460,7 +463,8 @@ app.get('/api/events/:id', async (c) => {
       lastName: null,
       photoUrl: null,
     },
-    participants: eventParticipants,
+    participants: confirmed,
+    reserve,
     // Ссылка на мини-апп, открытый сразу на этом мероприятии (та же схема ?startapp=, что и в
     // уведомлениях бота — путь после короткого имени мини-аппа Telegram не прокидывает).
     // Отдаём вместе с деталями (а не отдельной ручкой), чтобы кнопка "Поделиться" срабатывала

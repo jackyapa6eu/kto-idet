@@ -3,6 +3,7 @@ import { and, asc, eq, gte } from 'drizzle-orm'
 import { getDb } from './db/index.js'
 import { events, participants, users, organizations } from './db/schema.js'
 import { getBot, buildMiniAppLink } from './bot.js'
+import { splitParticipants } from './eventParticipants.js'
 
 const EVENTS_TIME_ZONE = 'Asia/Krasnoyarsk'
 
@@ -88,17 +89,21 @@ export async function buildDigestText(organizationId: number): Promise<string> {
     if (event.bank) lines.push(`🏦 Банк: ${escapeHtml(event.bank)}`)
     if (event.comment) lines.push(`📝 Комментарий: ${escapeHtml(event.comment)}`)
 
-    const countLabel =
-      event.maxParticipants != null
-        ? `${eventParticipants.length}/${event.maxParticipants}`
-        : `${eventParticipants.length}`
+    const { confirmed, reserve } = splitParticipants(eventParticipants, event.maxParticipants)
+    const hasLimit = event.maxParticipants != null && event.maxParticipants > 0
+    const countLabel = hasLimit ? `${confirmed.length}/${event.maxParticipants}` : `${confirmed.length}`
     lines.push(`👥 Участники (${countLabel}):`)
 
-    if (eventParticipants.length > 0) {
-      const names = eventParticipants.map((p) => formatParticipantLink(p)).join('\n')
-      lines.push(`<blockquote expandable>${names}</blockquote>`)
+    if (confirmed.length > 0) {
+      for (const p of confirmed) lines.push(formatParticipantLink(p))
     } else {
       lines.push('пока никого')
+    }
+
+    if (reserve.length > 0) {
+      lines.push('')
+      lines.push(`⏳ Резерв (${reserve.length}):`)
+      for (const p of reserve) lines.push(formatParticipantLink(p))
     }
 
     lines.push('')
