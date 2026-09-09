@@ -7,7 +7,7 @@ import { sign, verify } from 'hono/jwt'
 import { webhookCallback } from 'grammy'
 import { and, asc, count, desc, eq, gte } from 'drizzle-orm'
 import { getDb } from './db/index.js'
-import { events, participants, users, loginSessions, organizations } from './db/schema.js'
+import { events, participants, users, loginSessions, organizations, eventTemplates } from './db/schema.js'
 import {
   getBot,
   getBotUsername,
@@ -61,6 +61,7 @@ const JWT_TTL_SECONDS = 30 * 24 * 60 * 60 // 30 дней — веб-сессия
 const LOGIN_SESSION_TTL_SECONDS = 10 * 60 // 10 минут на переход в Telegram и подтверждение
 const LEAVE_CUTOFF_MS = 6 * 60 * 60 * 1000 // за 6 часов до начала отменить участие уже нельзя
 const FREE_TIER_MONTHLY_EVENT_LIMIT = 5 // бесплатный тариф: столько мероприятий можно создать в месяц
+const FREE_TIER_TEMPLATE_LIMIT = 1 // бесплатный тариф: столько шаблонов можно сохранить "на пробу"
 
 const app = new Hono<{ Variables: { tgUser: { id: number } } }>()
 
@@ -400,6 +401,8 @@ app.post('/api/events', telegramAuth, async (c) => {
     bank?: string
     comment?: string
     repeatWeekly?: boolean
+    saveAsTemplate?: boolean
+    templateName?: string
   }>()
 
   if (!body.organizationId || !body.title || !body.location || !body.startsAt) {
@@ -436,6 +439,25 @@ app.post('/api/events', telegramAuth, async (c) => {
     }
   }
 
+  const templateName = body.saveAsTemplate ? body.templateName?.trim() : undefined
+  if (body.saveAsTemplate) {
+    if (!templateName) return c.json({ error: 'Укажите название шаблона' }, 400)
+    if (!isPaid) {
+      const [{ value: templatesCount }] = await db
+        .select({ value: count() })
+        .from(eventTemplates)
+        .where(eq(eventTemplates.organizationId, org.id))
+      if (templatesCount >= FREE_TIER_TEMPLATE_LIMIT) {
+        return c.json(
+          {
+            error: `На бесплатном тарифе доступен только ${FREE_TIER_TEMPLATE_LIMIT} шаблон — больше на платном`,
+          },
+          402,
+        )
+      }
+    }
+  }
+
   const [created] = await db
     .insert(events)
     .values({
@@ -463,7 +485,66 @@ app.post('/api/events', telegramAuth, async (c) => {
     await db.update(events).set({ notificationMessageId }).where(eq(events.id, created.id))
   }
 
+  if (templateName) {
+    await db.insert(eventTemplates).values({
+      organizationId: org.id,
+      createdByTelegramId: telegramId,
+      name: templateName,
+      title: created.title,
+      location: created.location,
+      maxParticipants: created.maxParticipants,
+      trainer: created.trainer,
+      price: created.price,
+      court: created.court,
+      paymentPhone: created.paymentPhone,
+      bank: created.bank,
+      comment: created.comment,
+    })
+  }
+
   return c.json({ ...created, participantsCount: 1 }, 201)
+})
+
+app.get('/api/event-templates', telegramAuth, async (c) => {
+  const organizationId = Number(c.req.query('organizationId'))
+  if (!Number.isInteger(organizationId)) {
+    return c.json({ error: 'Параметр organizationId обязателен' }, 400)
+  }
+
+  const tgUser = c.get('tgUser')
+  const org = await getActiveOrgForMember(organizationId, String(tgUser.id))
+  if (!org) return c.json({ error: 'Доступно только участникам группы' }, 403)
+
+  const db = getDb()
+  const templates = await db
+    .select()
+    .from(eventTemplates)
+    .where(eq(eventTemplates.organizationId, organizationId))
+    .orderBy(asc(eventTemplates.createdAt))
+
+  return c.json(templates)
+})
+
+// Удалять шаблоны может только владелец/админ группы — та же модель прав, что у настроек
+// организации (PATCH /api/organizations/:id), не "автор шаблона или админ", как у мероприятий:
+// шаблон — общий ресурс организации, а не личное мероприятие конкретного участника.
+app.delete('/api/event-templates/:id', telegramAuth, async (c) => {
+  const id = Number(c.req.param('id'))
+  const tgUser = c.get('tgUser')
+  const telegramId = String(tgUser.id)
+  const db = getDb()
+
+  const [template] = await db.select().from(eventTemplates).where(eq(eventTemplates.id, id))
+  if (!template) return c.json({ error: 'Шаблон не найден' }, 404)
+
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, template.organizationId))
+  if (!org) return c.json({ error: 'Организация не найдена' }, 404)
+  const isOwner = org.ownerTelegramId === telegramId
+  const canManage = isOwner || (await isChatAdmin(org.telegramChatId, tgUser.id, org.ownerTelegramId))
+  if (!canManage) return c.json({ error: 'Удалять шаблоны может только администратор группы' }, 403)
+
+  await db.delete(eventTemplates).where(eq(eventTemplates.id, id))
+  return c.json({ ok: true })
 })
 
 app.get('/api/events/:id', async (c) => {

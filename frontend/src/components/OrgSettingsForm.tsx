@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { observer } from 'mobx-react-lite'
-import { Flex, Spin, Alert, Input, Button, Switch, Typography, message } from 'antd'
+import { Flex, Spin, Alert, Input, Button, Switch, Typography, Popconfirm, message } from 'antd'
+import { DeleteOutlined } from '@ant-design/icons'
 import { orgStore } from '../stores/orgStore'
+import { templatesStore } from '../stores/templatesStore'
 
 const { Text } = Typography
 
@@ -32,6 +34,7 @@ function SettingRow({
 export const OrgSettingsForm = observer(({ organizationId }: { organizationId: number }) => {
   useEffect(() => {
     orgStore.fetchOrganization(organizationId)
+    templatesStore.fetchTemplates(organizationId)
   }, [organizationId])
 
   const { org, loading, error, saving } = orgStore
@@ -106,6 +109,47 @@ export const OrgSettingsForm = observer(({ organizationId }: { organizationId: n
         disabled={saving}
         onChange={(checked) => handleToggle('notificationsEnabled', checked)}
       />
+
+      <Flex vertical gap={8}>
+        <Text strong>Шаблоны мероприятий</Text>
+        {templatesStore.loading ? (
+          <Spin size="small" />
+        ) : templatesStore.templates.length === 0 ? (
+          <Text type="secondary">Пока нет ни одного шаблона</Text>
+        ) : (
+          <Flex vertical gap={8}>
+            {templatesStore.templates.map((t) => {
+              const infoParts = [
+                t.location,
+                t.price,
+                t.maxParticipants != null ? `до ${t.maxParticipants} чел.` : null,
+              ].filter(Boolean)
+              return (
+                <Flex key={t.id} justify="space-between" align="center" gap={16}>
+                  <Flex vertical>
+                    <Text>{t.name}</Text>
+                    {infoParts.length > 0 && <Text type="secondary">{infoParts.join(' · ')}</Text>}
+                  </Flex>
+                  <Popconfirm
+                    title="Удалить шаблон?"
+                    okText="Удалить"
+                    okButtonProps={{ danger: true }}
+                    cancelText="Отмена"
+                    onConfirm={() => templatesStore.deleteTemplate(t.id)}
+                  >
+                    <Button
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      loading={templatesStore.deletingId === t.id}
+                    />
+                  </Popconfirm>
+                </Flex>
+              )
+            })}
+          </Flex>
+        )}
+      </Flex>
     </Flex>
   )
 })

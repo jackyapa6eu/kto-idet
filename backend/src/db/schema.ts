@@ -88,6 +88,27 @@ export const events = pgTable('events', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+// Пресет полей мероприятия для быстрого повторного создания (не путать с repeatEveryDays —
+// шаблон ничего не генерирует сам, это просто заготовка, которую подставляют в форму создания
+// вручную). Платная фича: FREE_TIER_TEMPLATE_LIMIT в index.ts даёт бесплатным один шаблон
+// "на пробу", на платном тарифе — без ограничений.
+export const eventTemplates = pgTable('event_templates', {
+  id: serial('id').primaryKey(),
+  organizationId: integer('organization_id').references(() => organizations.id).notNull(),
+  createdByTelegramId: text('created_by_telegram_id').notNull(),
+  name: text('name').notNull(),
+  title: text('title').notNull(),
+  location: text('location'),
+  maxParticipants: integer('max_participants'),
+  trainer: text('trainer'),
+  price: text('price'),
+  court: text('court'),
+  paymentPhone: text('payment_phone'),
+  bank: text('bank'),
+  comment: text('comment'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 // Singleton (id всегда 1) — id самого сообщения бота со сводкой мероприятий в топике,
 // чтобы редактировать его на месте вместо отправки новых сообщений.
 export const channelDigest = pgTable('channel_digest', {

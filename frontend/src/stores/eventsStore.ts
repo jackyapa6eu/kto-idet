@@ -56,9 +56,13 @@ export interface CreateEventInput {
   bank?: string
   comment?: string
   repeatWeekly?: boolean
+  saveAsTemplate?: boolean
+  templateName?: string
 }
 
-export type UpdateEventInput = CreateEventInput
+// PUT /api/events/:id не принимает saveAsTemplate/templateName — сохранение шаблона доступно
+// только при создании нового мероприятия, не при редактировании существующего.
+export type UpdateEventInput = Omit<CreateEventInput, 'saveAsTemplate' | 'templateName'>
 
 class EventsStore {
   // Список — per-org: запоминаем, для какой организации он загружен, чтобы create/update/
