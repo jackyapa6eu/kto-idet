@@ -29,14 +29,24 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-// tg://user?id=<id> — официальная HTML-ссылка Telegram для упоминания пользователя по id
-// без юзернейма (Bot API создаёт из неё text_mention-сущность): нажатие открывает профиль,
-// работает даже у тех, кто не задал себе @username. telegramId — всегда числовая строка из
-// нашей же БД (Telegram user id), экранировать её как пользовательский ввод не нужно.
-function formatParticipantLink(p: { telegramId: string; firstName: string; lastName: string | null; paid: boolean }): string {
+// https://t.me/<username> резолвится в кликабельный профиль для кого угодно (публичный
+// юзернейм ищется глобально), в отличие от tg://user?id=<id> — та ссылка кликабельна только
+// у тех, чей клиент уже «знает» этого пользователя (общий чат/контакты дают клиенту
+// access_hash на MTProto-уровне); для незнакомого зрителя без общего контекста и без
+// юзернейма у собеседника рабочей ссылки в принципе не существует — это ограничение
+// Telegram, а не наше. username/telegramId — из нашей же БД, не пользовательский ввод,
+// экранировать не нужно (юзернеймы Telegram и так ограничены [a-zA-Z0-9_]).
+function formatParticipantLink(p: {
+  telegramId: string
+  username: string | null
+  firstName: string
+  lastName: string | null
+  paid: boolean
+}): string {
   const name = escapeHtml([p.firstName, p.lastName].filter(Boolean).join(' '))
   const label = p.paid ? `${name} 💰` : name
-  return `<a href="tg://user?id=${p.telegramId}">${label}</a>`
+  const href = p.username ? `https://t.me/${p.username}` : `tg://user?id=${p.telegramId}`
+  return `<a href="${href}">${label}</a>`
 }
 
 export async function buildDigestText(organizationId: number): Promise<string> {
@@ -58,6 +68,7 @@ export async function buildDigestText(organizationId: number): Promise<string> {
     const eventParticipants = await db
       .select({
         telegramId: users.telegramId,
+        username: users.username,
         firstName: users.firstName,
         lastName: users.lastName,
         paid: participants.paid,

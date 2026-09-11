@@ -11,9 +11,13 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function mention(p: { telegramId: string; firstName: string; lastName: string | null }): string {
-  const name = [p.firstName, p.lastName].filter(Boolean).join(' ')
-  return `<a href="tg://user?id=${p.telegramId}">${escapeHtml(name)}</a>`
+// https://t.me/<username> работает для любого зрителя (глобальный публичный юзернейм),
+// tg://user?id=<id> — только если клиент зрителя уже знает этого пользователя (общий
+// чат/контакты) — см. подробное обоснование в digest.ts::formatParticipantLink.
+function mention(p: { telegramId: string; username: string | null; firstName: string; lastName: string | null }): string {
+  const name = escapeHtml([p.firstName, p.lastName].filter(Boolean).join(' '))
+  const href = p.username ? `https://t.me/${p.username}` : `tg://user?id=${p.telegramId}`
+  return `<a href="${href}">${name}</a>`
 }
 
 // Внешний крон дёргает /api/cron/reminders раз в 30 минут и проверяет, какие события попали
@@ -58,7 +62,12 @@ export async function sendDueReminders(): Promise<number> {
     if (!event.reminderChatId || !event.notificationsEnabled) continue
 
     const eventParticipants = await db
-      .select({ telegramId: users.telegramId, firstName: users.firstName, lastName: users.lastName })
+      .select({
+        telegramId: users.telegramId,
+        username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
       .from(participants)
       .innerJoin(users, eq(users.telegramId, participants.telegramId))
       .where(eq(participants.eventId, event.id))

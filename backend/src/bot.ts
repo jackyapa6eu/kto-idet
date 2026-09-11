@@ -195,7 +195,7 @@ async function handleMyChatMember(ctx: Context) {
 async function createOrganizationDraft(
   chatId: string,
   chatTitle: string,
-  addedBy: { id: number; first_name: string },
+  addedBy: { id: number; first_name: string; username?: string },
 ) {
   const db = getDb()
   // onConflictDoUpdate специально не трогает status/digestChatId/reminderChatId и т.п.:
@@ -229,7 +229,10 @@ async function createOrganizationDraft(
   if (!delivered) {
     // В личку не достучаться (пользователь ни разу не жал Start) — хотя бы предупредим
     // прямо в группе, коротко, без дублирования шагов из визарда.
-    const mention = `<a href="tg://user?id=${addedBy.id}">${escapeHtml(addedBy.first_name)}</a>`
+    // https://t.me/<username> кликабельна для кого угодно, tg://user?id=<id> — только если
+    // клиент зрителя уже знает этого пользователя (общий чат/контакты); см. digest.ts.
+    const href = addedBy.username ? `https://t.me/${addedBy.username}` : `tg://user?id=${addedBy.id}`
+    const mention = `<a href="${href}">${escapeHtml(addedBy.first_name)}</a>`
     await getBot().api.sendMessage(
       chatId,
       `${mention}, напишите мне /start в личке, чтобы продолжить настройку.`,
