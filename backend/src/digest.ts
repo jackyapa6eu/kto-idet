@@ -64,7 +64,7 @@ export async function buildDigestText(organizationId: number): Promise<string> {
 
   const lines = ['📋 <b>Мероприятия</b>', '']
 
-  for (const event of upcoming) {
+  for (const [index, event] of upcoming.entries()) {
     const eventParticipants = await db
       .select({
         telegramId: users.telegramId,
@@ -106,9 +106,14 @@ export async function buildDigestText(organizationId: number): Promise<string> {
       for (const p of reserve) lines.push(formatParticipantLink(p))
     }
 
-    lines.push('')
-    lines.push('──────────')
-    lines.push('')
+    // Разделитель только между событиями, не после последнего — иначе после фикса ссылок
+    // (см. formatParticipantLink) он повисает прямо над карточкой link preview первого
+    // t.me/<username>-упоминания и выглядит как мусор в конце сообщения.
+    if (index < upcoming.length - 1) {
+      lines.push('')
+      lines.push('──────────')
+      lines.push('')
+    }
   }
 
   return lines.join('\n').trim()
@@ -207,6 +212,7 @@ export async function syncChannelDigest(organizationId: number): Promise<void> {
       await bot.api.editMessageText(org.digestChatId, org.digestMessageId, text, {
         parse_mode: 'HTML',
         reply_markup: keyboard,
+        link_preview_options: { is_disabled: true },
       })
       return
     } catch (e) {
@@ -219,6 +225,7 @@ export async function syncChannelDigest(organizationId: number): Promise<void> {
     message_thread_id: org.digestThreadId,
     parse_mode: 'HTML',
     reply_markup: keyboard,
+    link_preview_options: { is_disabled: true },
   })
   await bot.api.pinChatMessage(org.digestChatId, sent.message_id, { disable_notification: true })
 

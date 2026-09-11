@@ -236,7 +236,7 @@ async function createOrganizationDraft(
     await getBot().api.sendMessage(
       chatId,
       `${mention}, напишите мне /start в личке, чтобы продолжить настройку.`,
-      { parse_mode: 'HTML' },
+      { parse_mode: 'HTML', link_preview_options: { is_disabled: true } },
     )
   }
 }
@@ -302,6 +302,7 @@ async function handleSetHere(ctx: Context, kind: 'digest' | 'reminders') {
           message_thread_id: threadId,
           parse_mode: 'HTML',
           reply_markup: keyboard,
+          link_preview_options: { is_disabled: true },
         })
         digestMessageId = sent.message_id
         // disable_notification только глушит пуш; служебное "закрепил сообщение" всё равно

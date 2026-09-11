@@ -88,6 +88,7 @@ export async function sendDueReminders(): Promise<number> {
     await bot.api.sendMessage(event.reminderChatId, text, {
       parse_mode: 'HTML',
       message_thread_id: event.reminderThreadId ?? undefined,
+      link_preview_options: { is_disabled: true },
     })
 
     await db.insert(eventReminders).values({ eventId: event.id }).onConflictDoNothing()
