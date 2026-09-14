@@ -109,6 +109,10 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
         if (values.saveAsTemplate && eventsStore.organizationId != null) {
           await templatesStore.fetchTemplates(eventsStore.organizationId)
         }
+        // AntD Modal по умолчанию не размонтирует контент при закрытии (нет destroyOnClose),
+        // а modalStore.open() при следующем клике на "Создать" передаёт тот же тип компонента
+        // без смены key — React переиспользует инстанс формы вместе со старыми значениями.
+        form.resetFields()
       }
       modalStore.close()
     } catch (e) {
