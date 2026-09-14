@@ -707,6 +707,30 @@ app.patch('/api/events/:id/participants/:telegramId', telegramAuth, async (c) =>
     .update(participants)
     .set({ paid: body.paid })
     .where(and(eq(participants.eventId, id), eq(participants.telegramId, participantTelegramId)))
+  await notifyDigest(event.organizationId)
+
+  return c.json({ ok: true })
+})
+
+// Организатор исключает участника из списка ("не придёт") — в отличие от самостоятельного
+// выхода (ручка ниже), без ограничения LEAVE_CUTOFF_MS: это решение организатора, а не
+// участника, отменяющего запись в последний момент.
+app.delete('/api/events/:id/participants/:telegramId', telegramAuth, async (c) => {
+  const { id: idParam, telegramId: participantTelegramId } = c.req.param()
+  const id = Number(idParam)
+  const tgUser = c.get('tgUser')
+  const db = getDb()
+
+  const [event] = await db.select().from(events).where(eq(events.id, id))
+  if (!event) return c.json({ error: 'Мероприятие не найдено' }, 404)
+  if (event.createdByTelegramId !== String(tgUser.id)) {
+    return c.json({ error: 'Исключить участника может только организатор' }, 403)
+  }
+
+  await db
+    .delete(participants)
+    .where(and(eq(participants.eventId, id), eq(participants.telegramId, participantTelegramId)))
+  await notifyDigest(event.organizationId)
 
   return c.json({ ok: true })
 })

@@ -211,6 +211,17 @@ class EventsStore {
     }
   }
 
+  // Организатор исключает участника ("не придёт") — в отличие от setParticipantPaid, полный
+  // refetch тут уместен: список может измениться сильнее одного поля (кто-то из резерва
+  // поднимается в основной состав).
+  async kickParticipant(eventId: number, telegramId: string) {
+    const res = await apiFetch(`/api/events/${eventId}/participants/${telegramId}`, {
+      method: 'DELETE',
+    })
+    if (!res.ok) throw new Error(await extractErrorMessage(res))
+    await Promise.all([this.fetchEventDetails(eventId), this.refetchEvents()])
+  }
+
   async deleteEvent(id: number) {
     const res = await apiFetch(`/api/events/${id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(await extractErrorMessage(res))

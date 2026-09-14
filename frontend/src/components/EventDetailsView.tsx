@@ -9,6 +9,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   ShareAltOutlined,
+  UserDeleteOutlined,
 } from '@ant-design/icons'
 import { eventsStore } from '../stores/eventsStore'
 import { userStore } from '../stores/userStore'
@@ -24,14 +25,21 @@ function participantName(p: { firstName: string; lastName: string | null }) {
 
 // tg://user?id=<id> — та же ссылка на профиль, что используется в сообщениях бота
 // (см. digest.ts): открывает профиль по id, работает даже без @username.
-function ParticipantRow({
+//
+// observer() обязателен: participant приходит как поле observable-массива eventsStore.selectedEvent,
+// и без него мутация participant.paid (оптимистичное обновление в setParticipantPaid) не
+// перерисовывает эту строку — родитель EventDetailsView не читает .paid в своём рендере, поэтому
+// без собственной подписки чекбокс визуально не отвечал на клик до следующего refetch.
+const ParticipantRow = observer(function ParticipantRow({
   participant,
   isOrganizer,
   onTogglePaid,
+  onKick,
 }: {
   participant: { telegramId: string; firstName: string; lastName: string | null; photoUrl: string | null; paid: boolean }
   isOrganizer: boolean
   onTogglePaid: (telegramId: string, paid: boolean) => void
+  onKick: (telegramId: string, name: string) => void
 }) {
   return (
     <Flex align="center" justify="space-between" gap={8}>
@@ -48,16 +56,34 @@ function ParticipantRow({
         </Flex>
       </a>
       {isOrganizer && (
-        <Checkbox
-          checked={participant.paid}
-          onChange={(e) => onTogglePaid(participant.telegramId, e.target.checked)}
-        >
-          Оплачено
-        </Checkbox>
+        <Flex align="center" gap={4}>
+          <Checkbox
+            checked={participant.paid}
+            onChange={(e) => onTogglePaid(participant.telegramId, e.target.checked)}
+          >
+            Оплачено
+          </Checkbox>
+          <Popconfirm
+            title="Исключить участника?"
+            description={`${participantName(participant)} не будет числиться в записавшихся.`}
+            okText="Не придёт"
+            okButtonProps={{ danger: true }}
+            cancelText="Отмена"
+            onConfirm={() => onKick(participant.telegramId, participantName(participant))}
+          >
+            <Button
+              type="text"
+              danger
+              size="small"
+              icon={<UserDeleteOutlined />}
+              title="Не придёт"
+            />
+          </Popconfirm>
+        </Flex>
       )}
     </Flex>
   )
-}
+})
 
 // Показывает ссылку текстом, чтобы скопировать вручную — сюда попадаем, если Clipboard API
 // недоступен (например, в вебвью Telegram он может быть запрещён политикой разрешений).
@@ -167,6 +193,15 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
     }
   }
 
+  const handleKick = async (telegramId: string, name: string) => {
+    try {
+      await eventsStore.kickParticipant(event.id, telegramId)
+      message.success(`${name} исключён(а) из мероприятия`)
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Не удалось исключить участника')
+    }
+  }
+
   const handleEdit = () => {
     modalStore.open(<CreateEventForm event={event} />, 'Редактирование мероприятия')
   }
@@ -259,6 +294,7 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
                 participant={p}
                 isOrganizer={isOrganizer}
                 onTogglePaid={handleTogglePaid}
+                onKick={handleKick}
               />
             ))
           ) : (
@@ -277,6 +313,7 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
                 participant={p}
                 isOrganizer={isOrganizer}
                 onTogglePaid={handleTogglePaid}
+                onKick={handleKick}
               />
             ))}
           </Flex>
