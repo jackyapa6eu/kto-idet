@@ -726,6 +726,12 @@ app.delete('/api/events/:id/participants/:telegramId', telegramAuth, async (c) =
   if (event.createdByTelegramId !== String(tgUser.id)) {
     return c.json({ error: 'Исключить участника может только организатор' }, 403)
   }
+  // Организатор — участник своего мероприятия по умолчанию (см. вставку при создании выше),
+  // но у него нет пути вернуться через UI (ветка "Вы организатор" в EventDetailsView никогда
+  // не показывает кнопку "Участвовать") — не даём исключить самого себя и остаться снаружи.
+  if (participantTelegramId === event.createdByTelegramId) {
+    return c.json({ error: 'Организатора нельзя исключить из мероприятия' }, 400)
+  }
 
   await db
     .delete(participants)

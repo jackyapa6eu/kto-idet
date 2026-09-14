@@ -33,11 +33,16 @@ function participantName(p: { firstName: string; lastName: string | null }) {
 const ParticipantRow = observer(function ParticipantRow({
   participant,
   isOrganizer,
+  isEventOrganizer,
   onTogglePaid,
   onKick,
 }: {
   participant: { telegramId: string; firstName: string; lastName: string | null; photoUrl: string | null; paid: boolean }
   isOrganizer: boolean
+  // Организатор мероприятия сам числится участником (см. index.ts при создании), но у него
+  // нет пути вернуться через UI, если его исключить — бэкенд это запрещает, а кнопку прячем
+  // здесь же, чтобы не предлагать действие, которое всё равно закончится ошибкой.
+  isEventOrganizer: boolean
   onTogglePaid: (telegramId: string, paid: boolean) => void
   onKick: (telegramId: string, name: string) => void
 }) {
@@ -63,22 +68,24 @@ const ParticipantRow = observer(function ParticipantRow({
           >
             Оплачено
           </Checkbox>
-          <Popconfirm
-            title="Исключить участника?"
-            description={`${participantName(participant)} не будет числиться в записавшихся.`}
-            okText="Не придёт"
-            okButtonProps={{ danger: true }}
-            cancelText="Отмена"
-            onConfirm={() => onKick(participant.telegramId, participantName(participant))}
-          >
-            <Button
-              type="text"
-              danger
-              size="small"
-              icon={<UserDeleteOutlined />}
-              title="Не придёт"
-            />
-          </Popconfirm>
+          {!isEventOrganizer && (
+            <Popconfirm
+              title="Исключить участника?"
+              description={`${participantName(participant)} не будет числиться в записавшихся.`}
+              okText="Не придёт"
+              okButtonProps={{ danger: true }}
+              cancelText="Отмена"
+              onConfirm={() => onKick(participant.telegramId, participantName(participant))}
+            >
+              <Button
+                type="text"
+                danger
+                size="small"
+                icon={<UserDeleteOutlined />}
+                title="Не придёт"
+              />
+            </Popconfirm>
+          )}
         </Flex>
       )}
     </Flex>
@@ -293,6 +300,7 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
                 key={p.telegramId}
                 participant={p}
                 isOrganizer={isOrganizer}
+                isEventOrganizer={p.telegramId === event.createdByTelegramId}
                 onTogglePaid={handleTogglePaid}
                 onKick={handleKick}
               />
@@ -312,6 +320,7 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
                 key={p.telegramId}
                 participant={p}
                 isOrganizer={isOrganizer}
+                isEventOrganizer={p.telegramId === event.createdByTelegramId}
                 onTogglePaid={handleTogglePaid}
                 onKick={handleKick}
               />
