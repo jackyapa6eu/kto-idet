@@ -60,7 +60,25 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
   const isPaid = orgStore.org?.isPaid ?? false
   const templateLimitReached = !isPaid && templatesStore.templates.length >= 1
 
-  const handleTemplateSelect = (templateId: number) => {
+  // Поля, которые подставляет шаблон — те же самые чистим при отмене выбора (value === undefined,
+  // приходит из allowClear у Select), чтобы не оставлять значения от снятого шаблона в форме.
+  const templateFieldNames = [
+    'title',
+    'location',
+    'maxParticipants',
+    'trainer',
+    'price',
+    'court',
+    'paymentPhone',
+    'bank',
+    'comment',
+  ] as const
+
+  const handleTemplateChange = (templateId: number | undefined) => {
+    if (templateId == null) {
+      form.resetFields([...templateFieldNames])
+      return
+    }
     const template = templatesStore.templates.find((t) => t.id === templateId)
     if (!template) return
     form.setFieldsValue({
@@ -129,7 +147,7 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
             allowClear
             placeholder="Не выбран"
             options={templatesStore.templates.map((t) => ({ value: t.id, label: t.name }))}
-            onChange={(value) => value != null && handleTemplateSelect(value)}
+            onChange={handleTemplateChange}
           />
         </Form.Item>
       )}
