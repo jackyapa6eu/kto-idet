@@ -41,13 +41,14 @@ function escapeHtml(text: string): string {
 function formatEventHeaderLines(event: { title: string; startsAt: Date; location: string | null }): string[] {
   return [
     `🏐 <b>${escapeHtml(event.title)}</b>`,
-    `📅 ${formatEventDate(event.startsAt)} · 🕐 ${formatEventTime(event.startsAt)}`,
+    `📅 ${formatEventDate(event.startsAt)}`,
+    `🕐 ${formatEventTime(event.startsAt)}`,
     `📍 ${escapeHtml(event.location ?? '')}`,
   ]
 }
 
-// Второстепенные поля группируем по смыслу в одну строку через "·" вместо списка отдельных
-// строк на каждое поле — так карточка компактнее и заметно меньше похожа на анкету.
+// Каждое поле — на своей строке, без группировки через "·": так проще читать на телефоне,
+// чем плотную строку из нескольких полей подряд.
 function formatEventDetailLines(event: {
   trainer: string | null
   price: string | null
@@ -57,22 +58,12 @@ function formatEventDetailLines(event: {
   comment: string | null
 }): string[] {
   const lines: string[] = []
-
-  const infoParts = [
-    event.trainer && `🎓 Тренер: ${escapeHtml(event.trainer)}`,
-    event.price && `💰 Стоимость: ${escapeHtml(event.price)}`,
-    event.court && `🎾 Корт: ${escapeHtml(event.court)}`,
-  ].filter((p): p is string => Boolean(p))
-  if (infoParts.length > 0) lines.push(infoParts.join(' · '))
-
-  const paymentParts = [
-    event.paymentPhone && `💳 Перевод на номер: ${escapeHtml(event.paymentPhone)}`,
-    event.bank && `🏦 Банк: ${escapeHtml(event.bank)}`,
-  ].filter((p): p is string => Boolean(p))
-  if (paymentParts.length > 0) lines.push(paymentParts.join(' · '))
-
+  if (event.trainer) lines.push(`🎓 Тренер: ${escapeHtml(event.trainer)}`)
+  if (event.price) lines.push(`💰 Стоимость: ${escapeHtml(event.price)}`)
+  if (event.court) lines.push(`🎾 Корт: ${escapeHtml(event.court)}`)
+  if (event.paymentPhone) lines.push(`💳 Перевод на номер: ${escapeHtml(event.paymentPhone)}`)
+  if (event.bank) lines.push(`🏦 Банк: ${escapeHtml(event.bank)}`)
   if (event.comment) lines.push(`📝 Комментарий: ${escapeHtml(event.comment)}`)
-
   return lines
 }
 
