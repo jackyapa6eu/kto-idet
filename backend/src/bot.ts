@@ -18,6 +18,12 @@ const MINI_APP_SHORT_NAME = process.env.TELEGRAM_MINI_APP_SHORT_NAME ?? 'app'
 const LOGIN_PAYLOAD_PREFIX = 'login-'
 
 const BACK_BUTTON_TEXT = '🏠 В начало'
+// Апдейты от Telegram (my_chat_member на повышение до админа, сообщения с командами
+// /set_..._here) должны сами продвигать визард, но иногда не доходят/не успевают
+// обработаться — эта кнопка руками пересчитывает и показывает актуальный шаг, не полагаясь
+// на них. Callback у неё тот же, что у выбора группы в корневом меню (menu:org:<id>) — тот
+// обработчик и так всегда пересчитывает вид заново.
+const CHECK_BUTTON_TEXT = '🔄 Проверить'
 
 // Единственный telegramId, заданный в ADMIN_TELEGRAM_ID, — владелец бота, а не какой-то
 // организации. Используется и здесь (кнопка в меню), и в index.ts (доступ к /api/admin/*).
@@ -425,7 +431,10 @@ async function computeOrgWizardView(org: typeof organizations.$inferSelect): Pro
   if (!(await isBotAdminInChat(org.telegramChatId))) {
     return {
       text: `«${name}»\n\n👉 Сделайте меня администратором группы.`,
-      keyboard: new InlineKeyboard().text(BACK_BUTTON_TEXT, 'menu:root'),
+      keyboard: new InlineKeyboard()
+        .text(CHECK_BUTTON_TEXT, `menu:org:${org.id}`)
+        .row()
+        .text(BACK_BUTTON_TEXT, 'menu:root'),
     }
   }
 
@@ -434,7 +443,10 @@ async function computeOrgWizardView(org: typeof organizations.$inferSelect): Pro
       text:
         `«${name}» — я администратор ✅\n\n👉 В топике для расписания выполните:\n<code>/set_digest_here</code>` +
         '\n\n💡 Лучше в отдельном закрытом топике, но подойдёт и обычный чат.',
-      keyboard: new InlineKeyboard().text(BACK_BUTTON_TEXT, 'menu:root'),
+      keyboard: new InlineKeyboard()
+        .text(CHECK_BUTTON_TEXT, `menu:org:${org.id}`)
+        .row()
+        .text(BACK_BUTTON_TEXT, 'menu:root'),
     }
   }
 
@@ -444,6 +456,8 @@ async function computeOrgWizardView(org: typeof organizations.$inferSelect): Pro
         `«${name}» — расписание подключено ✅\n\n👉 В топике для оповещений выполните ` +
         '<code>/set_reminders_here</code>, или пропустите — будем слать туда же, где расписание.',
       keyboard: new InlineKeyboard()
+        .text(CHECK_BUTTON_TEXT, `menu:org:${org.id}`)
+        .row()
         .text('Пропустить', `menu:skip_reminders:${org.id}`)
         .row()
         .text(BACK_BUTTON_TEXT, 'menu:root'),
@@ -585,24 +599,41 @@ async function restartMenu(telegramId: number, view: MenuView): Promise<boolean>
   return sendFreshMenu(telegramId, view)
 }
 
+// Если шаг ещё не выполнен, computeOrgWizardView вернёт тот же текст/клавиатуру, что уже
+// показаны — editMessageText в этом случае кидает GrammyError "message is not modified".
+// Без этого перехвата кнопка "Проверить" (и любая другая, ведущая на неизменившийся вид)
+// вешает спиннер на кнопке до таймаута Telegram, не отвечая пользователю вообще ничего —
+// именно так выглядело "бот сам не перешагивал по пунктам настройки".
+async function applyMenuEdit(ctx: Context, view: MenuView, noticeIfUnchanged?: string) {
+  try {
+    await ctx.editMessageText(view.text, { parse_mode: 'HTML', reply_markup: view.keyboard })
+    await ctx.answerCallbackQuery()
+  } catch (e) {
+    if (e instanceof GrammyError && e.description.includes('message is not modified')) {
+      await ctx.answerCallbackQuery(
+        noticeIfUnchanged ? { text: noticeIfUnchanged, show_alert: false } : undefined,
+      )
+      return
+    }
+    throw e
+  }
+}
+
 async function handleMenuCallback(ctx: Context) {
   const from = ctx.from
   const data = ctx.callbackQuery?.data
   if (!from || !data) return
 
   if (data === 'menu:root') {
-    const view = await buildEntryView(from.id)
-    await ctx.editMessageText(view.text, { parse_mode: 'HTML', reply_markup: view.keyboard })
-    await ctx.answerCallbackQuery()
+    await applyMenuEdit(ctx, await buildEntryView(from.id))
     return
   }
 
   if (data === 'menu:add') {
-    await ctx.editMessageText(ONBOARDING_TEXT, {
-      parse_mode: 'HTML',
-      reply_markup: new InlineKeyboard().text(BACK_BUTTON_TEXT, 'menu:root'),
+    await applyMenuEdit(ctx, {
+      text: ONBOARDING_TEXT,
+      keyboard: new InlineKeyboard().text(BACK_BUTTON_TEXT, 'menu:root'),
     })
-    await ctx.answerCallbackQuery()
     return
   }
 
@@ -632,9 +663,7 @@ async function handleMenuCallback(ctx: Context) {
       .where(eq(organizations.id, orgId))
       .returning()
 
-    const view = await computeOrgWizardView(updated)
-    await ctx.editMessageText(view.text, { parse_mode: 'HTML', reply_markup: view.keyboard })
-    await ctx.answerCallbackQuery()
+    await applyMenuEdit(ctx, await computeOrgWizardView(updated))
     return
   }
 
@@ -645,9 +674,7 @@ async function handleMenuCallback(ctx: Context) {
     return
   }
 
-  const view = await computeOrgWizardView(org)
-  await ctx.editMessageText(view.text, { parse_mode: 'HTML', reply_markup: view.keyboard })
-  await ctx.answerCallbackQuery()
+  await applyMenuEdit(ctx, await computeOrgWizardView(org), 'Пока не вижу изменений — выполните шаг и попробуйте ещё раз')
 }
 
 export async function isChatAdmin(chatId: string, telegramId: number, ownerTelegramId: string): Promise<boolean> {
