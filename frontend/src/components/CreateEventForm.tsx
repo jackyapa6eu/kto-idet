@@ -11,6 +11,22 @@ function disabledDate(date: Dayjs) {
   return date.isBefore(dayjs().startOf('day'))
 }
 
+function range(start: number, end: number) {
+  return Array.from({ length: Math.max(0, end - start) }, (_, i) => start + i)
+}
+
+// Часы/минуты режем только когда выбранная дата — сегодня: если применить это правило ко
+// всем датам без разбора (просто "текущий час и раньше — недоступны"), это случайно
+// заблокирует совершенно нормальное время на любую будущую дату.
+function disabledTimeForDate(date: Dayjs | undefined) {
+  if (!date || !date.isSame(dayjs(), 'day')) return {}
+  const now = dayjs()
+  return {
+    disabledHours: () => range(0, now.hour()),
+    disabledMinutes: (hour: number) => (hour === now.hour() ? range(0, now.minute() + 1) : []),
+  }
+}
+
 interface EventFormValues {
   templatePicker?: number
   title: string
@@ -33,6 +49,7 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
   const [form] = Form.useForm<EventFormValues>()
   const isEditing = event != null
   const saveAsTemplate = Form.useWatch('saveAsTemplate', form)
+  const selectedDate = Form.useWatch('date', form)
 
   useEffect(() => {
     if (!isEditing && eventsStore.organizationId != null) {
@@ -160,8 +177,29 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
       <Form.Item name="date" label="Дата" rules={[{ required: true, message: 'Укажите дату' }]}>
         <DatePicker style={{ width: '100%' }} format="D MMMM" disabledDate={disabledDate} />
       </Form.Item>
-      <Form.Item name="time" label="Время" rules={[{ required: true, message: 'Укажите время' }]}>
-        <TimePicker style={{ width: '100%' }} format="HH:mm" />
+      <Form.Item
+        name="time"
+        label="Время"
+        dependencies={['date']}
+        rules={[
+          { required: true, message: 'Укажите время' },
+          {
+            // Дата и время — раздельные поля формы, поэтому мимо этой проверки дата в прошлом
+            // могла проскочить, если пользователь сперва выбрал время, а потом дату сегодняшним
+            // днём раньше уже выбранного времени (disabledTime на TimePicker такое не ловит,
+            // т.к. считается только в момент открытия/смены самого времени).
+            validator: (_, time?: Dayjs) => {
+              const date = form.getFieldValue('date') as Dayjs | undefined
+              if (!date || !time) return Promise.resolve()
+              const combined = date.hour(time.hour()).minute(time.minute()).second(0).millisecond(0)
+              return combined.isBefore(dayjs())
+                ? Promise.reject(new Error('Выбранное время уже прошло'))
+                : Promise.resolve()
+            },
+          },
+        ]}
+      >
+        <TimePicker style={{ width: '100%' }} format="HH:mm" disabledTime={() => disabledTimeForDate(selectedDate)} />
       </Form.Item>
       <Form.Item name="trainer" label="Тренер">
         <Input placeholder="Необязательно" />
