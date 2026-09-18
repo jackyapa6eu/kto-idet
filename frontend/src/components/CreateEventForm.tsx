@@ -157,7 +157,13 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
   }
 
   return (
-    <Form form={form} layout="vertical" initialValues={initialValues} onFinish={handleFinish}>
+    <Form
+      form={form}
+      layout="vertical"
+      initialValues={initialValues}
+      onFinish={handleFinish}
+      scrollToFirstError={{ behavior: 'smooth', block: 'center' }}
+    >
       {!isEditing && templatesStore.templates.length > 0 && (
         <Form.Item name="templatePicker" label="Начать с шаблона">
           <Select
