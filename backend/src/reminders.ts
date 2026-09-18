@@ -79,8 +79,9 @@ export async function sendDueReminders(): Promise<number> {
     const mentions = confirmed.map(mention).join(' ')
     const text = [
       `⏰ Скоро <b>${escapeHtml(event.title)}</b>!`,
-      `Место: ${escapeHtml(event.location ?? '')}`,
-      ...(event.court ? [`Корт: ${escapeHtml(event.court)}`] : []),
+      `📍 ${escapeHtml(event.location ?? '')}`,
+      ...(event.court ? [`🎾 Корт: ${escapeHtml(event.court)}`] : []),
+      '',
       `${mentions} вы придёте?`,
       'Ставьте реакции на сообщении 👇',
     ].join('\n')

@@ -36,6 +36,46 @@ function escapeHtml(text: string): string {
 // юзернейма у собеседника рабочей ссылки в принципе не существует — это ограничение
 // Telegram, а не наше. username/telegramId — из нашей же БД, не пользовательский ввод,
 // экранировать не нужно (юзернеймы Telegram и так ограничены [a-zA-Z0-9_]).
+// Общая "шапка" карточки события — используется и в сводке, и в анонсе о создании, чтобы
+// оба места форматировали одни и те же поля одинаково, а не расходились со временем.
+function formatEventHeaderLines(event: { title: string; startsAt: Date; location: string | null }): string[] {
+  return [
+    `🏐 <b>${escapeHtml(event.title)}</b>`,
+    `📅 ${formatEventDate(event.startsAt)} · 🕐 ${formatEventTime(event.startsAt)}`,
+    `📍 ${escapeHtml(event.location ?? '')}`,
+  ]
+}
+
+// Второстепенные поля группируем по смыслу в одну строку через "·" вместо списка отдельных
+// строк на каждое поле — так карточка компактнее и заметно меньше похожа на анкету.
+function formatEventDetailLines(event: {
+  trainer: string | null
+  price: string | null
+  court: string | null
+  paymentPhone: string | null
+  bank: string | null
+  comment: string | null
+}): string[] {
+  const lines: string[] = []
+
+  const infoParts = [
+    event.trainer && `🎓 Тренер: ${escapeHtml(event.trainer)}`,
+    event.price && `💰 Стоимость: ${escapeHtml(event.price)}`,
+    event.court && `🎾 Корт: ${escapeHtml(event.court)}`,
+  ].filter((p): p is string => Boolean(p))
+  if (infoParts.length > 0) lines.push(infoParts.join(' · '))
+
+  const paymentParts = [
+    event.paymentPhone && `💳 Перевод на номер: ${escapeHtml(event.paymentPhone)}`,
+    event.bank && `🏦 Банк: ${escapeHtml(event.bank)}`,
+  ].filter((p): p is string => Boolean(p))
+  if (paymentParts.length > 0) lines.push(paymentParts.join(' · '))
+
+  if (event.comment) lines.push(`📝 Комментарий: ${escapeHtml(event.comment)}`)
+
+  return lines
+}
+
 function formatParticipantLink(p: {
   telegramId: string
   username: string | null
@@ -78,21 +118,13 @@ export async function buildDigestText(organizationId: number): Promise<string> {
       .where(eq(participants.eventId, event.id))
       .orderBy(asc(participants.joinedAt))
 
-    lines.push(`🏐 <b>${escapeHtml(event.title)}</b>`)
-    lines.push(`📅 ${formatEventDate(event.startsAt)}`)
-    lines.push(`🕐 ${formatEventTime(event.startsAt)}`)
-    lines.push(`📍 ${escapeHtml(event.location ?? '')}`)
-    if (event.trainer) lines.push(`🎓 Тренер: ${escapeHtml(event.trainer)}`)
-    if (event.price) lines.push(`💰 Стоимость: ${escapeHtml(event.price)}`)
-    if (event.court) lines.push(`🎾 Корт: ${escapeHtml(event.court)}`)
-    if (event.paymentPhone) lines.push(`💳 Перевод на номер: ${escapeHtml(event.paymentPhone)}`)
-    if (event.bank) lines.push(`🏦 Банк: ${escapeHtml(event.bank)}`)
-    if (event.comment) lines.push(`📝 Комментарий: ${escapeHtml(event.comment)}`)
+    lines.push(...formatEventHeaderLines(event))
+    lines.push(...formatEventDetailLines(event))
 
     const { confirmed, reserve } = splitParticipants(eventParticipants, event.maxParticipants)
     const hasLimit = event.maxParticipants != null && event.maxParticipants > 0
     const countLabel = hasLimit ? `${confirmed.length}/${event.maxParticipants}` : `${confirmed.length}`
-    lines.push(`👥 Участники (${countLabel}):`)
+    lines.push('', `👥 Участники (${countLabel}):`)
 
     if (confirmed.length > 0) {
       for (const p of confirmed) lines.push(formatParticipantLink(p))
@@ -123,17 +155,9 @@ function buildEventNotificationText(event: typeof events.$inferSelect): string {
   const lines = [
     '🆕 <b>Новое мероприятие!</b>',
     '',
-    `🏐 <b>${escapeHtml(event.title)}</b>`,
-    `📅 ${formatEventDate(event.startsAt)}`,
-    `🕐 ${formatEventTime(event.startsAt)}`,
-    `📍 ${escapeHtml(event.location ?? '')}`,
+    ...formatEventHeaderLines(event),
+    ...formatEventDetailLines(event),
   ]
-  if (event.trainer) lines.push(`🎓 Тренер: ${escapeHtml(event.trainer)}`)
-  if (event.price) lines.push(`💰 Стоимость: ${escapeHtml(event.price)}`)
-  if (event.court) lines.push(`🎾 Корт: ${escapeHtml(event.court)}`)
-  if (event.paymentPhone) lines.push(`💳 Перевод на номер: ${escapeHtml(event.paymentPhone)}`)
-  if (event.bank) lines.push(`🏦 Банк: ${escapeHtml(event.bank)}`)
-  if (event.comment) lines.push(`📝 Комментарий: ${escapeHtml(event.comment)}`)
   if (event.maxParticipants != null) lines.push(`👥 Мест: ${event.maxParticipants}`)
   return lines.join('\n')
 }
