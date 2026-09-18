@@ -1,6 +1,6 @@
 import { useEffect, type CSSProperties } from 'react'
 import { observer } from 'mobx-react-lite'
-import { Card, Typography, Tag, Flex, Spin, Alert, Button } from 'antd'
+import { Card, Typography, Tag, Flex, Spin, Alert, Button, theme } from 'antd'
 import { CalendarOutlined, EnvironmentOutlined, TeamOutlined, PlusOutlined } from '@ant-design/icons'
 import { eventsStore, type EventItem } from '../stores/eventsStore'
 import { orgStore } from '../stores/orgStore'
@@ -24,13 +24,20 @@ function openCreateEvent() {
 // Без durationMinutes у нас нет момента окончания — событие считаем прошедшим по одному
 // только времени начала, а "идёт сейчас" (требует знать оба конца интервала) не показываем
 // вовсе, вместо того чтобы гадать длительность.
-function getEventCardStyle(event: EventItem): CSSProperties {
+//
+// Цвета берём из токенов темы (colorSuccessBg/colorSuccessBorder), а не захардкоженных hex —
+// они сами меняются вместе с алгоритмом ConfigProvider в App.tsx (см. themeStore.isDark), а
+// фиксированный светло-зелёный на тёмной теме читался плохо.
+function getEventCardStyle(
+  event: EventItem,
+  successColors: { bg: string; border: string },
+): CSSProperties {
   const now = Date.now()
   const start = new Date(event.startsAt).getTime()
   const end = event.durationMinutes != null ? start + event.durationMinutes * 60_000 : null
 
   if (end != null && now >= start && now <= end) {
-    return { backgroundColor: '#f6ffed', borderColor: '#b7eb8f' }
+    return { backgroundColor: successColors.bg, borderColor: successColors.border }
   }
   if ((end ?? start) < now) {
     return { opacity: 0.5 }
@@ -39,6 +46,8 @@ function getEventCardStyle(event: EventItem): CSSProperties {
 }
 
 export const EventsList = observer(({ organizationId }: { organizationId: number }) => {
+  const { token } = theme.useToken()
+
   useEffect(() => {
     eventsStore.fetchEvents(organizationId)
     orgStore.fetchOrganization(organizationId)
@@ -88,7 +97,7 @@ export const EventsList = observer(({ organizationId }: { organizationId: number
               key={event.id}
               hoverable
               onClick={() => openEventDetails(event)}
-              style={getEventCardStyle(event)}
+              style={getEventCardStyle(event, { bg: token.colorSuccessBg, border: token.colorSuccessBorder })}
             >
               <Flex vertical gap={8}>
                 <Flex justify="space-between" align="start">
