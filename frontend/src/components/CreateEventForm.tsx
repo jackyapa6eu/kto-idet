@@ -55,6 +55,7 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
   const isEditing = event != null
   const saveAsTemplate = Form.useWatch('saveAsTemplate', form)
   const selectedDate = Form.useWatch('date', form)
+  const repeatWeekly = Form.useWatch('repeatWeekly', form)
 
   useEffect(() => {
     if (!isEditing && eventsStore.organizationId != null) {
@@ -257,9 +258,21 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
         name="repeatWeekly"
         label="Повторять каждую неделю"
         valuePropName="checked"
-        extra={!isPaid && <Typography.Text type="secondary">Доступно на платном тарифе</Typography.Text>}
+        extra={
+          !isPaid && (
+            <Typography.Text type="secondary">
+              {repeatWeekly
+                ? 'Подписка закончилась — можно только выключить повтор'
+                : 'Доступно на платном тарифе'}
+            </Typography.Text>
+          )
+        }
       >
-        <Switch disabled={!isPaid} />
+        {/* Выключить повтор можно всегда (это и есть механизм "остановить повтор", см.
+            backend/src/index.ts) — блокируем свитчер только когда пытаются его ВКЛЮЧИТЬ без
+            платной подписки, а не когда он уже включён и подписка успела закончиться, иначе
+            свитчер застревает во включённом положении без возможности его отжать. */}
+        <Switch disabled={!isPaid && !repeatWeekly} />
       </Form.Item>
       {!isEditing && (
         <>
