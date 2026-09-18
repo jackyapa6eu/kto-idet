@@ -1,5 +1,5 @@
 import { GrammyError, InlineKeyboard } from 'grammy'
-import { and, asc, eq, gte } from 'drizzle-orm'
+import { and, asc, eq, gte, isNotNull } from 'drizzle-orm'
 import { getDb } from './db/index.js'
 import { events, participants, users, organizations } from './db/schema.js'
 import { getBot, buildMiniAppLink } from './bot.js'
@@ -248,4 +248,30 @@ export async function syncChannelDigest(organizationId: number): Promise<void> {
     .update(organizations)
     .set({ digestMessageId: sent.message_id, updatedAt: new Date() })
     .where(eq(organizations.id, organizationId))
+}
+
+// syncChannelDigest обычно вызывается только реактивно — при создании/удалении события,
+// записи/отмене участия. Если в организации давно нет никакой активности, закреплённая
+// сводка так и остаётся снимком на момент последнего изменения: buildDigestText уже
+// отфильтровывает мероприятия прошлых дней (см. startOfTodayInEventsTimeZone), но это не
+// применяется само по себе, пока что-то не дёрнет пересборку. Дёргается раз в сутки внешним
+// кроном (см. /api/cron/purge-organizations в index.ts — используем существующую суточную
+// задачу вместо того, чтобы заводить на cron-job.org ещё одну).
+export async function resyncAllDigests(): Promise<number> {
+  const db = getDb()
+  const rows = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(isNotNull(organizations.digestChatId))
+
+  let resyncedCount = 0
+  for (const { id } of rows) {
+    try {
+      await syncChannelDigest(id)
+      resyncedCount++
+    } catch (e) {
+      console.error(`Не удалось обновить сводку организации ${id} в суточном кроне`, e)
+    }
+  }
+  return resyncedCount
 }

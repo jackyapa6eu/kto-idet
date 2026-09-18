@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Flex, Spin, Alert, Statistic, Table, Tag, Tabs, Button, Popconfirm, Typography, message } from 'antd'
-import dayjs from 'dayjs'
+import { Flex, Spin, Alert, Statistic, Table, Tag, Tabs, Button, Popconfirm, Typography, DatePicker, message } from 'antd'
+import dayjs, { type Dayjs } from 'dayjs'
 import { apiFetch, extractErrorMessage } from '../api'
 
 const { Text } = Typography
@@ -12,6 +12,7 @@ interface AdminOrg {
   status: string
   createdAt: string
   scheduledDeletionAt: string | null
+  paidUntil: string | null
   eventsCount: number
 }
 
@@ -81,6 +82,27 @@ function OrganizationsTab() {
     )
   }
 
+  // Только владелец бота (ADMIN_TELEGRAM_ID) может дойти до этой вкладки вообще — сам
+  // PATCH на бэкенде отдельно перепроверяет то же самое, здесь не полагаемся только на
+  // то, что до формы никто посторонний не доберётся.
+  const handlePaidUntilChange = async (orgId: number, date: Dayjs | null) => {
+    const paidUntil = date ? date.endOf('day').toISOString() : null
+    try {
+      const res = await apiFetch(`/api/admin/organizations/${orgId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ paidUntil }),
+      })
+      if (!res.ok) throw new Error(await extractErrorMessage(res))
+      setStats((prev) =>
+        prev
+          ? { ...prev, organizations: prev.organizations.map((o) => (o.id === orgId ? { ...o, paidUntil } : o)) }
+          : prev,
+      )
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Не удалось изменить дату оплаты')
+    }
+  }
+
   const { counts, organizations } = stats
 
   return (
@@ -124,6 +146,21 @@ function OrganizationsTab() {
             render: (value: string) => dayjs(value).format('DD.MM.YY'),
           },
           { title: 'Событий', dataIndex: 'eventsCount', width: 80, align: 'right' },
+          {
+            title: 'Оплачено до',
+            dataIndex: 'paidUntil',
+            width: 220,
+            render: (value: string | null, row) => (
+              <DatePicker
+                size="small"
+                allowClear
+                format="DD.MM.YYYY"
+                placeholder="Бесплатный"
+                value={value ? dayjs(value) : null}
+                onChange={(date) => handlePaidUntilChange(row.id, date)}
+              />
+            ),
+          },
         ]}
       />
     </Flex>

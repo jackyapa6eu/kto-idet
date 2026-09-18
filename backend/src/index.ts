@@ -20,7 +20,7 @@ import {
 } from './bot.js'
 import { upsertUser } from './users.js'
 import { validateInitData } from './telegramAuth.js'
-import { syncChannelDigest, sendEventCreatedNotification, updateEventNotification } from './digest.js'
+import { syncChannelDigest, sendEventCreatedNotification, updateEventNotification, resyncAllDigests } from './digest.js'
 import { sendDueReminders } from './reminders.js'
 import { generateNextRepeatingEvents } from './eventRepeat.js'
 import { splitParticipants } from './eventParticipants.js'
@@ -274,6 +274,7 @@ app.get('/api/admin/stats', telegramAuth, async (c) => {
       status: organizations.status,
       createdAt: organizations.createdAt,
       scheduledDeletionAt: organizations.scheduledDeletionAt,
+      paidUntil: organizations.paidUntil,
       eventsCount: count(events.id),
     })
     .from(organizations)
@@ -302,6 +303,32 @@ app.get('/api/admin/stats', telegramAuth, async (c) => {
   }
 
   return c.json({ counts, organizations: withTitles })
+})
+
+// Единственная ручка, которая пишет organizations.paidUntil — намеренно нет способа задать
+// платный статус самому себе через обычный UI организации (OrgSettingsForm его даже не
+// показывает), только владелец бота через этот эндпоинт админки.
+app.patch('/api/admin/organizations/:id', telegramAuth, async (c) => {
+  const tgUser = c.get('tgUser')
+  if (!isPlatformAdmin(tgUser.id)) {
+    return c.json({ error: 'Доступ запрещён' }, 403)
+  }
+
+  const id = Number(c.req.param('id'))
+  const body = await c.req.json<{ paidUntil?: string | null }>()
+  if (body.paidUntil !== null && typeof body.paidUntil !== 'string') {
+    return c.json({ error: 'paidUntil обязателен (ISO-строка даты или null)' }, 400)
+  }
+
+  const db = getDb()
+  const [updated] = await db
+    .update(organizations)
+    .set({ paidUntil: body.paidUntil ? new Date(body.paidUntil) : null, updatedAt: new Date() })
+    .where(eq(organizations.id, id))
+    .returning()
+
+  if (!updated) return c.json({ error: 'Группа не найдена' }, 404)
+  return c.json({ id: updated.id, paidUntil: updated.paidUntil })
 })
 
 // Лента последних мероприятий по всем чатам сразу — чтобы можно было мельком пробежаться
@@ -784,6 +811,9 @@ app.post('/api/cron/reminders', async (c) => {
 // Дёргается тем же внешним кроном (можно раз в сутки — тут нет чувствительности к частоте,
 // в отличие от cron/reminders) — стирает организации, которые выгнали ботом из группы больше
 // 14 дней назад и за это время не вернули (см. scheduleOrganizationDeletion в bot.ts).
+// Заодно (не заводя лишнюю задачу на cron-job.org) пересобирает закреплённые сводки всех
+// организаций — без этого сводка чистится от мероприятий прошлых дней только реактивно,
+// при следующем создании/записи/отмене (см. resyncAllDigests в digest.ts).
 app.post('/api/cron/purge-organizations', async (c) => {
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return c.json({ error: 'CRON_SECRET не настроен' }, 500)
@@ -792,7 +822,8 @@ app.post('/api/cron/purge-organizations', async (c) => {
   }
 
   const purged = await purgeExpiredOrganizations()
-  return c.json({ ok: true, purged })
+  const resynced = await resyncAllDigests()
+  return c.json({ ok: true, purged, resynced })
 })
 serve({
   fetch: app.fetch,
