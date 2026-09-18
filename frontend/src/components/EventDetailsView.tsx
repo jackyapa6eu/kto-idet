@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { observer } from 'mobx-react-lite'
+import dayjs from 'dayjs'
 import { Descriptions, Tag, Avatar, Flex, Typography, Spin, Button, Checkbox, Popconfirm, Alert, Modal, message } from 'antd'
 import {
   CalendarOutlined,
@@ -21,6 +22,14 @@ import { TelegramBotLoginButton } from './TelegramBotLoginButton'
 
 function participantName(p: { firstName: string; lastName: string | null }) {
   return [p.firstName, p.lastName].filter(Boolean).join(' ')
+}
+
+function formatDuration(startsAt: string, durationMinutes: number): string {
+  const hours = Math.floor(durationMinutes / 60)
+  const minutes = durationMinutes % 60
+  const parts = [hours > 0 && `${hours} ч`, minutes > 0 && `${minutes} мин`].filter(Boolean)
+  const endsAt = dayjs(startsAt).add(durationMinutes, 'minute').format('HH:mm')
+  return `${parts.join(' ')} (до ${endsAt})`
 }
 
 // tg://user?id=<id> — та же ссылка на профиль, что используется в сообщениях бота
@@ -256,6 +265,11 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
         >
           {formatEventDate(event.startsAt)}
         </Descriptions.Item>
+        {event.durationMinutes != null && (
+          <Descriptions.Item label="Продолжительность">
+            {formatDuration(event.startsAt, event.durationMinutes)}
+          </Descriptions.Item>
+        )}
         <Descriptions.Item
           label={
             <>

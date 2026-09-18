@@ -53,6 +53,7 @@ export async function generateNextRepeatingEvents(): Promise<number> {
         title: event.title,
         location: event.location,
         startsAt: nextStartsAt,
+        durationMinutes: event.durationMinutes,
         maxParticipants: event.maxParticipants,
         trainer: event.trainer,
         price: event.price,

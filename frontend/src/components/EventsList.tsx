@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type CSSProperties } from 'react'
 import { observer } from 'mobx-react-lite'
 import { Card, Typography, Tag, Flex, Spin, Alert, Button } from 'antd'
 import { CalendarOutlined, EnvironmentOutlined, TeamOutlined, PlusOutlined } from '@ant-design/icons'
@@ -19,6 +19,23 @@ function openEventDetails(event: EventItem) {
 
 function openCreateEvent() {
   modalStore.open(<CreateEventForm />, 'Новое мероприятие')
+}
+
+// Без durationMinutes у нас нет момента окончания — событие считаем прошедшим по одному
+// только времени начала, а "идёт сейчас" (требует знать оба конца интервала) не показываем
+// вовсе, вместо того чтобы гадать длительность.
+function getEventCardStyle(event: EventItem): CSSProperties {
+  const now = Date.now()
+  const start = new Date(event.startsAt).getTime()
+  const end = event.durationMinutes != null ? start + event.durationMinutes * 60_000 : null
+
+  if (end != null && now >= start && now <= end) {
+    return { backgroundColor: '#f6ffed', borderColor: '#b7eb8f' }
+  }
+  if ((end ?? start) < now) {
+    return { opacity: 0.5 }
+  }
+  return {}
 }
 
 export const EventsList = observer(({ organizationId }: { organizationId: number }) => {
@@ -67,7 +84,12 @@ export const EventsList = observer(({ organizationId }: { organizationId: number
           const hasLimit = event.maxParticipants != null && event.maxParticipants > 0
           const isFull = hasLimit && event.participantsCount >= event.maxParticipants!
           return (
-            <Card key={event.id} hoverable onClick={() => openEventDetails(event)}>
+            <Card
+              key={event.id}
+              hoverable
+              onClick={() => openEventDetails(event)}
+              style={getEventCardStyle(event)}
+            >
               <Flex vertical gap={8}>
                 <Flex justify="space-between" align="start">
                   <Flex vertical gap={4}>

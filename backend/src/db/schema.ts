@@ -67,6 +67,11 @@ export const events = pgTable('events', {
   description: text('description'),
   location: text('location'),
   startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+  // Необязательно — задаёт event.startsAt + durationMinutes как момент окончания, который
+  // используют и мини-апп (подсветка "идёт сейчас"/погашенные прошедшие карточки в
+  // EventsList), и это же поле переносится в следующее звено цепочки повторов
+  // (см. generateNextRepeatingEvents).
+  durationMinutes: integer('duration_minutes'),
   maxParticipants: integer('max_participants'),
   trainer: text('trainer'),
   price: text('price'),

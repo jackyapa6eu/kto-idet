@@ -375,6 +375,7 @@ app.get('/api/events', telegramAuth, async (c) => {
       title: events.title,
       location: events.location,
       startsAt: events.startsAt,
+      durationMinutes: events.durationMinutes,
       maxParticipants: events.maxParticipants,
       participantsCount: count(participants.id),
     })
@@ -393,6 +394,7 @@ app.post('/api/events', telegramAuth, async (c) => {
     title?: string
     location?: string
     startsAt?: string
+    durationMinutes?: number
     maxParticipants?: number
     trainer?: string
     price?: string
@@ -465,6 +467,7 @@ app.post('/api/events', telegramAuth, async (c) => {
       title: body.title,
       location: body.location,
       startsAt: new Date(body.startsAt),
+      durationMinutes: body.durationMinutes ?? null,
       maxParticipants: body.maxParticipants ?? null,
       trainer: body.trainer ?? null,
       price: body.price ?? null,
@@ -603,6 +606,7 @@ app.put('/api/events/:id', telegramAuth, async (c) => {
     title?: string
     location?: string
     startsAt?: string
+    durationMinutes?: number
     maxParticipants?: number
     trainer?: string
     price?: string
@@ -636,6 +640,7 @@ app.put('/api/events/:id', telegramAuth, async (c) => {
       title: body.title,
       location: body.location,
       startsAt: new Date(body.startsAt),
+      durationMinutes: body.durationMinutes ?? null,
       maxParticipants: body.maxParticipants ?? null,
       trainer: body.trainer ?? null,
       price: body.price ?? null,

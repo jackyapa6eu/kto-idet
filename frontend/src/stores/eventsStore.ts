@@ -7,6 +7,7 @@ export interface EventItem {
   title: string
   location: string
   startsAt: string
+  durationMinutes: number | null
   participantsCount: number
   maxParticipants: number | null
 }
@@ -27,6 +28,7 @@ export interface EventDetails {
   title: string
   location: string
   startsAt: string
+  durationMinutes: number | null
   maxParticipants: number | null
   trainer: string | null
   price: string | null
@@ -48,6 +50,7 @@ export interface CreateEventInput {
   title: string
   location: string
   startsAt: string
+  durationMinutes?: number
   maxParticipants?: number
   trainer?: string
   price?: string

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { observer } from 'mobx-react-lite'
-import { Form, Input, DatePicker, TimePicker, InputNumber, Switch, Checkbox, Select, Button, Typography, message } from 'antd'
+import { Form, Input, DatePicker, TimePicker, InputNumber, Switch, Checkbox, Select, Button, Typography, Flex, message } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { eventsStore, type EventDetails } from '../stores/eventsStore'
 import { modalStore } from '../stores/modalStore'
@@ -27,12 +27,17 @@ function disabledTimeForDate(date: Dayjs | undefined) {
   }
 }
 
+const DURATION_HOURS_OPTIONS = range(0, 13).map((h) => ({ value: h, label: `${h} ч` }))
+const DURATION_MINUTES_OPTIONS = [0, 15, 30, 45].map((m) => ({ value: m, label: `${m} мин` }))
+
 interface EventFormValues {
   templatePicker?: number
   title: string
   location: string
   date: Dayjs
   time: Dayjs
+  durationHours?: number
+  durationMinutesPart?: number
   maxParticipants?: number
   trainer?: string
   price?: string
@@ -63,6 +68,8 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
         location: event.location,
         date: dayjs(event.startsAt),
         time: dayjs(event.startsAt),
+        durationHours: event.durationMinutes != null ? Math.floor(event.durationMinutes / 60) : undefined,
+        durationMinutesPart: event.durationMinutes != null ? event.durationMinutes % 60 : undefined,
         maxParticipants: event.maxParticipants ?? undefined,
         trainer: event.trainer ?? undefined,
         price: event.price ?? undefined,
@@ -118,10 +125,18 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
       .second(0)
       .millisecond(0)
 
+    // Необязательное поле — оба сегмента (часы/минуты) не заданы означает "не указано", а
+    // не "0 минут", иначе выбор пустых значений случайно превратил бы событие в мгновенное.
+    const durationHours = values.durationHours ?? 0
+    const durationMinutesPart = values.durationMinutesPart ?? 0
+    const durationMinutes =
+      durationHours > 0 || durationMinutesPart > 0 ? durationHours * 60 + durationMinutesPart : undefined
+
     const input = {
       title: values.title,
       location: values.location,
       startsAt: startsAt.toISOString(),
+      durationMinutes,
       maxParticipants: values.maxParticipants,
       trainer: values.trainer,
       price: values.price,
@@ -206,6 +221,16 @@ export const CreateEventForm = observer(({ event }: { event?: EventDetails }) =>
         ]}
       >
         <TimePicker style={{ width: '100%' }} format="HH:mm" disabledTime={() => disabledTimeForDate(selectedDate)} />
+      </Form.Item>
+      <Form.Item label="Продолжительность">
+        <Flex gap={8}>
+          <Form.Item name="durationHours" noStyle>
+            <Select allowClear placeholder="Часы" style={{ width: '100%' }} options={DURATION_HOURS_OPTIONS} />
+          </Form.Item>
+          <Form.Item name="durationMinutesPart" noStyle>
+            <Select allowClear placeholder="Минуты" style={{ width: '100%' }} options={DURATION_MINUTES_OPTIONS} />
+          </Form.Item>
+        </Flex>
       </Form.Item>
       <Form.Item name="trainer" label="Тренер">
         <Input placeholder="Необязательно" />
