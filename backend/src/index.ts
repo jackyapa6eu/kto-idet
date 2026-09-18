@@ -726,9 +726,10 @@ app.delete('/api/events/:id/participants/:telegramId', telegramAuth, async (c) =
   if (event.createdByTelegramId !== String(tgUser.id)) {
     return c.json({ error: 'Исключить участника может только организатор' }, 403)
   }
-  // Организатор — участник своего мероприятия по умолчанию (см. вставку при создании выше),
-  // но у него нет пути вернуться через UI (ветка "Вы организатор" в EventDetailsView никогда
-  // не показывает кнопку "Участвовать") — не даём исключить самого себя и остаться снаружи.
+  // Для своей же строки в списке у организатора есть отдельная кнопка "Не участвовать"
+  // (self-leave, ручка ниже) — эта же ручка предназначена именно для исключения ДРУГИХ,
+  // кнопка на собственной строке в UI скрыта (см. EventDetailsView), но подстрахуемся и
+  // на бэкенде на случай прямого запроса в обход UI.
   if (participantTelegramId === event.createdByTelegramId) {
     return c.json({ error: 'Организатора нельзя исключить из мероприятия' }, 400)
   }
@@ -749,9 +750,6 @@ app.delete('/api/events/:id/participants', telegramAuth, async (c) => {
 
   const [event] = await db.select().from(events).where(eq(events.id, id))
   if (!event) return c.json({ error: 'Мероприятие не найдено' }, 404)
-  if (event.createdByTelegramId === telegramId) {
-    return c.json({ error: 'Организатор не может отменить участие в своём мероприятии' }, 400)
-  }
   if (event.startsAt.getTime() - Date.now() < LEAVE_CUTOFF_MS) {
     return c.json({ error: 'Нельзя отменить участие менее чем за 6 часов до начала мероприятия' }, 400)
   }

@@ -39,9 +39,10 @@ const ParticipantRow = observer(function ParticipantRow({
 }: {
   participant: { telegramId: string; firstName: string; lastName: string | null; photoUrl: string | null; paid: boolean }
   isOrganizer: boolean
-  // Организатор мероприятия сам числится участником (см. index.ts при создании), но у него
-  // нет пути вернуться через UI, если его исключить — бэкенд это запрещает, а кнопку прячем
-  // здесь же, чтобы не предлагать действие, которое всё равно закончится ошибкой.
+  // На своей же строке у организатора есть отдельная кнопка "Не участвовать" внизу (self-leave,
+  // с возможностью потом снова нажать "Участвовать") — прячем кнопку "исключить" здесь, чтобы
+  // не дублировать то же действие двумя разными путями с разным поведением (эта ручка режет
+  // без ограничения по времени, self-leave — с LEAVE_CUTOFF_MS, см. index.ts).
   isEventOrganizer: boolean
   onTogglePaid: (telegramId: string, paid: boolean) => void
   onKick: (telegramId: string, name: string) => void
@@ -337,29 +338,34 @@ export const EventDetailsView = observer(({ eventId }: { eventId: number }) => {
             </Typography.Text>
             <TelegramBotLoginButton />
           </Flex>
-        ) : isOrganizer ? (
-          <Typography.Text type="secondary">Вы организатор этого мероприятия</Typography.Text>
-        ) : isParticipant ? (
+        ) : (
           <Flex vertical gap={4}>
-            <Button
-              danger
-              block
-              loading={acting}
-              disabled={isPastLeaveCutoff}
-              onClick={handleLeave}
-            >
-              {isInReserve ? 'Покинуть резерв' : 'Не участвовать'}
-            </Button>
-            {isPastLeaveCutoff && (
-              <Typography.Text type="secondary" style={{ textAlign: 'center' }}>
-                Отменить участие можно не позднее чем за 6 часов до начала
-              </Typography.Text>
+            {isOrganizer && (
+              <Typography.Text type="secondary">Вы организатор этого мероприятия</Typography.Text>
+            )}
+            {isParticipant ? (
+              <>
+                <Button
+                  danger
+                  block
+                  loading={acting}
+                  disabled={isPastLeaveCutoff}
+                  onClick={handleLeave}
+                >
+                  {isInReserve ? 'Покинуть резерв' : 'Не участвовать'}
+                </Button>
+                {isPastLeaveCutoff && (
+                  <Typography.Text type="secondary" style={{ textAlign: 'center' }}>
+                    Отменить участие можно не позднее чем за 6 часов до начала
+                  </Typography.Text>
+                )}
+              </>
+            ) : (
+              <Button type="primary" block loading={acting} onClick={handleJoin}>
+                {isFull ? 'Записаться в резерв' : 'Участвовать'}
+              </Button>
             )}
           </Flex>
-        ) : (
-          <Button type="primary" block loading={acting} onClick={handleJoin}>
-            {isFull ? 'Записаться в резерв' : 'Участвовать'}
-          </Button>
         )}
       </Flex>
 
