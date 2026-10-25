@@ -7,3 +7,6 @@ dist/
 .idea/
 .DS_Store
 *.log
+
+# Local AI assistant notes
+CLAUDE.md
