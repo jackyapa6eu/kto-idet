@@ -10,3 +10,6 @@ dist/
 
 # Local AI assistant notes
 CLAUDE.md
+backend/.claude/
+backend/.agents/
+backend/skills-lock.json
