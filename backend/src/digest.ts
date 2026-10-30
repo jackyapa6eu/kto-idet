@@ -80,6 +80,30 @@ function formatParticipantLink(p: {
   return `<a href="${href}">${label}</a>`
 }
 
+type EventNotificationParticipant = {
+  telegramId: string
+  username: string | null
+  firstName: string
+  lastName: string | null
+  paid: boolean
+}
+
+async function getEventNotificationParticipants(eventId: number): Promise<EventNotificationParticipant[]> {
+  const db = getDb()
+  return db
+    .select({
+      telegramId: users.telegramId,
+      username: users.username,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      paid: participants.paid,
+    })
+    .from(participants)
+    .innerJoin(users, eq(users.telegramId, participants.telegramId))
+    .where(eq(participants.eventId, eventId))
+    .orderBy(asc(participants.joinedAt))
+}
+
 export async function buildDigestText(organizationId: number): Promise<string> {
   const db = getDb()
 
@@ -142,7 +166,10 @@ export async function buildDigestText(organizationId: number): Promise<string> {
   return lines.join('\n').trim()
 }
 
-function buildEventNotificationText(event: typeof events.$inferSelect): string {
+export function buildEventNotificationText(
+  event: typeof events.$inferSelect,
+  eventParticipants: EventNotificationParticipant[],
+): string {
   const lines = [
     '🆕 <b>Новое мероприятие!</b>',
     '',
@@ -150,6 +177,22 @@ function buildEventNotificationText(event: typeof events.$inferSelect): string {
     ...formatEventDetailLines(event),
   ]
   if (event.maxParticipants != null) lines.push(`👥 Мест: ${event.maxParticipants}`)
+
+  const { confirmed, reserve } = splitParticipants(eventParticipants, event.maxParticipants)
+  const hasLimit = event.maxParticipants != null && event.maxParticipants > 0
+  const countLabel = hasLimit ? `${confirmed.length}/${event.maxParticipants}` : `${confirmed.length}`
+  lines.push('', `👥 Участники (${countLabel}):`)
+  if (confirmed.length > 0) {
+    for (const participant of confirmed) lines.push(formatParticipantLink(participant))
+  } else {
+    lines.push('пока никого')
+  }
+
+  if (reserve.length > 0) {
+    lines.push('', `⏳ Резерв (${reserve.length}):`)
+    for (const participant of reserve) lines.push(formatParticipantLink(participant))
+  }
+
   return lines.join('\n')
 }
 
@@ -174,11 +217,17 @@ export async function sendEventCreatedNotification(
   const [org] = await db.select().from(organizations).where(eq(organizations.id, event.organizationId))
   if (!org?.reminderChatId || !org.notificationsEnabled) return undefined
 
-  const sent = await getBot().api.sendMessage(org.reminderChatId, buildEventNotificationText(event), {
-    parse_mode: 'HTML',
-    message_thread_id: org.reminderThreadId ?? undefined,
-    reply_markup: buildEventNotificationKeyboard(event.id),
-  })
+  const eventParticipants = await getEventNotificationParticipants(event.id)
+  const sent = await getBot().api.sendMessage(
+    org.reminderChatId,
+    buildEventNotificationText(event, eventParticipants),
+    {
+      parse_mode: 'HTML',
+      message_thread_id: org.reminderThreadId ?? undefined,
+      reply_markup: buildEventNotificationKeyboard(event.id),
+      link_preview_options: { is_disabled: true },
+    },
+  )
   return sent.message_id
 }
 
@@ -192,12 +241,17 @@ export async function updateEventNotification(event: typeof events.$inferSelect)
   const [org] = await db.select().from(organizations).where(eq(organizations.id, event.organizationId))
   if (!org?.reminderChatId || !org.notificationsEnabled) return
 
+  const eventParticipants = await getEventNotificationParticipants(event.id)
   try {
     await getBot().api.editMessageText(
       org.reminderChatId,
       event.notificationMessageId,
-      buildEventNotificationText(event),
-      { parse_mode: 'HTML', reply_markup: buildEventNotificationKeyboard(event.id) },
+      buildEventNotificationText(event, eventParticipants),
+      {
+        parse_mode: 'HTML',
+        reply_markup: buildEventNotificationKeyboard(event.id),
+        link_preview_options: { is_disabled: true },
+      },
     )
   } catch (e) {
     if (e instanceof GrammyError && e.description.includes('message is not modified')) return

@@ -714,6 +714,7 @@ app.post('/api/events/:id/participants', telegramAuth, async (c) => {
     .values({ eventId: id, telegramId: String(tgUser.id) })
     .onConflictDoNothing()
   await notifyDigest(event.organizationId)
+  await notifyEventUpdated(event)
 
   return c.json({ ok: true })
 })
@@ -740,6 +741,7 @@ app.patch('/api/events/:id/participants/:telegramId', telegramAuth, async (c) =>
     .set({ paid: body.paid })
     .where(and(eq(participants.eventId, id), eq(participants.telegramId, participantTelegramId)))
   await notifyDigest(event.organizationId)
+  await notifyEventUpdated(event)
 
   return c.json({ ok: true })
 })
@@ -770,6 +772,7 @@ app.delete('/api/events/:id/participants/:telegramId', telegramAuth, async (c) =
     .delete(participants)
     .where(and(eq(participants.eventId, id), eq(participants.telegramId, participantTelegramId)))
   await notifyDigest(event.organizationId)
+  await notifyEventUpdated(event)
 
   return c.json({ ok: true })
 })
@@ -790,6 +793,7 @@ app.delete('/api/events/:id/participants', telegramAuth, async (c) => {
     .delete(participants)
     .where(and(eq(participants.eventId, id), eq(participants.telegramId, telegramId)))
   await notifyDigest(event.organizationId)
+  await notifyEventUpdated(event)
 
   return c.json({ ok: true })
 })

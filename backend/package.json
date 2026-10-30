@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "dotenv -e .env.local -- tsx watch src/index.ts",
     "build": "tsc",
+    "test": "tsx --test test/*.test.ts",
     "start": "node dist/index.js",
     "db:push": "dotenv -e .env.local -- drizzle-kit push",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
